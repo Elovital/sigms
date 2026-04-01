@@ -1,6 +1,6 @@
 /* SIGMS ELOVITAL — SPA Router */
 import { getToken, clearToken } from './api.js';
-import { renderLoginPage, initLoginHandlers, logout, getMe } from './auth.js';
+import { renderLoginPage, initLoginHandlers, logout, getMe, showForceChangeModal } from './auth.js';
 import { renderDashboard } from './dashboard.js';
 import { renderClients } from './clients.js';
 import { renderApolices } from './apolices.js';
@@ -47,6 +47,9 @@ async function init() {
     renderLayout(root);
     window.addEventListener('hashchange', () => navigate());
     navigate();
+    if (currentUser?.must_change_password) {
+        showForceChangeModal();
+    }
 }
 
 function renderLayout(root) {

@@ -1,14 +1,17 @@
 """Authentication endpoints."""
+import secrets
 from fastapi import APIRouter, Depends, HTTPException, Response, Request
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-from datetime import datetime, timezone
+from sqlalchemy import select
+from datetime import datetime, timezone, timedelta
 
 from app.database import get_db
 from app.dependencies import get_current_user, get_client_ip
 from app.models.user import User
 from app.services import auth_service
 from app.services.encryption_service import encrypt, decrypt
+from app.services.email_service import send_password_reset_email
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -27,6 +30,7 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
     requires_2fa: bool = False
     pre_auth_token: str | None = None
+    must_change_password: bool = False
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -48,7 +52,7 @@ async def login(body: LoginRequest, response: Response, request: Request, db: As
     refresh_token = auth_service.create_refresh_token_value()
     await auth_service.store_refresh_token(db, user.id, refresh_token)
     response.set_cookie("refresh_token", refresh_token, httponly=True, max_age=7 * 86400, samesite="strict")
-    return TokenResponse(access_token=access_token)
+    return TokenResponse(access_token=access_token, must_change_password=bool(user.must_change_password))
 
 
 @router.post("/2fa/verify-login")
@@ -76,7 +80,7 @@ async def verify_2fa_login(body: TwoFARequest, response: Response, request: Requ
     refresh_token = auth_service.create_refresh_token_value()
     await auth_service.store_refresh_token(db, user.id, refresh_token)
     response.set_cookie("refresh_token", refresh_token, httponly=True, max_age=7 * 86400, samesite="strict")
-    return {"access_token": access_token, "token_type": "bearer"}
+    return {"access_token": access_token, "token_type": "bearer", "must_change_password": bool(user.must_change_password)}
 
 
 @router.post("/refresh")
@@ -113,7 +117,6 @@ async def setup_2fa(current_user: User = Depends(get_current_user), db: AsyncSes
     secret = auth_service.generate_totp_secret()
     uri = auth_service.get_totp_uri(secret, current_user.username)
     qr = auth_service.generate_qr_code_base64(uri)
-    # Store encrypted temporarily (enabled after verify)
     current_user.totp_secret_enc = encrypt(secret)
     await db.commit()
     return {"qr_code": f"data:image/png;base64,{qr}", "secret": secret}
@@ -139,6 +142,7 @@ async def me(current_user: User = Depends(get_current_user)):
         "email": current_user.email,
         "role": current_user.role,
         "two_factor_enabled": current_user.two_factor_enabled,
+        "must_change_password": bool(current_user.must_change_password),
     }
 
 
@@ -158,5 +162,54 @@ async def change_password(
     if len(body.new_password) < 6:
         raise HTTPException(status_code=400, detail="A nova senha deve ter pelo menos 6 caracteres")
     current_user.hashed_password = auth_service.hash_password(body.new_password)
+    current_user.must_change_password = False
     await db.commit()
     return {"message": "Senha alterada com sucesso"}
+
+
+class RequestResetRequest(BaseModel):
+    email: str
+
+
+@router.post("/request-password-reset")
+async def request_password_reset(body: RequestResetRequest, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(User).where(User.email == body.email))
+    user = result.scalar_one_or_none()
+    # Always return success to avoid user enumeration
+    if not user or not user.is_active:
+        return {"message": "Se o email existir, receberá um link de recuperação."}
+
+    token = secrets.token_urlsafe(48)
+    user.password_reset_token = token
+    user.password_reset_expires = datetime.now(timezone.utc) + timedelta(minutes=30)
+    await db.commit()
+
+    send_password_reset_email(user.email, user.username, token)
+    return {"message": "Se o email existir, receberá um link de recuperação."}
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
+
+
+@router.post("/reset-password")
+async def reset_password(body: ResetPasswordRequest, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(User).where(User.password_reset_token == body.token))
+    user = result.scalar_one_or_none()
+    if not user or not user.password_reset_expires:
+        raise HTTPException(status_code=400, detail="Token inválido ou expirado")
+    expires = user.password_reset_expires
+    if expires.tzinfo is None:
+        expires = expires.replace(tzinfo=timezone.utc)
+    if expires < datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="Token expirado. Solicite um novo link.")
+    if len(body.new_password) < 6:
+        raise HTTPException(status_code=400, detail="A senha deve ter pelo menos 6 caracteres")
+
+    user.hashed_password = auth_service.hash_password(body.new_password)
+    user.password_reset_token = None
+    user.password_reset_expires = None
+    user.must_change_password = False
+    await db.commit()
+    return {"message": "Senha redefinida com sucesso. Pode agora fazer login."}

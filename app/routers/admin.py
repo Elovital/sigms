@@ -34,7 +34,7 @@ class UserUpdate(BaseModel):
 async def list_users(db: AsyncSession = Depends(get_db), current_user: User = Depends(require_admin)):
     result = await db.execute(select(User))
     users = result.scalars().all()
-    return [{"id": u.id, "username": u.username, "email": u.email, "role": u.role, "is_active": u.is_active, "two_factor_enabled": u.two_factor_enabled, "last_login_at": u.last_login_at.isoformat() if u.last_login_at else None} for u in users]
+    return [{"id": u.id, "username": u.username, "email": u.email, "role": u.role, "is_active": u.is_active, "two_factor_enabled": u.two_factor_enabled, "must_change_password": bool(u.must_change_password), "last_login_at": u.last_login_at.isoformat() if u.last_login_at else None} for u in users]
 
 
 @router.post("/users", status_code=201)
@@ -42,7 +42,7 @@ async def create_user(body: UserIn, db: AsyncSession = Depends(get_db), current_
     existing = await db.execute(select(User).where(User.username == body.username))
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=409, detail="Username já existe")
-    user = User(username=body.username, email=body.email, hashed_password=hash_password(body.password), role=body.role)
+    user = User(username=body.username, email=body.email, hashed_password=hash_password(body.password), role=body.role, must_change_password=True)
     db.add(user)
     await db.commit()
     return {"id": user.id, "username": user.username, "email": user.email, "role": user.role}
@@ -62,6 +62,7 @@ async def update_user(user_id: int, body: UserUpdate, db: AsyncSession = Depends
         user.is_active = body.is_active
     if body.password:
         user.hashed_password = hash_password(body.password)
+        user.must_change_password = True
     await db.commit()
     return {"id": user.id, "username": user.username, "role": user.role, "is_active": user.is_active}
 

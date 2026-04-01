@@ -15,6 +15,9 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     two_factor_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     totp_secret_enc: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    must_change_password: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    password_reset_token: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    password_reset_expires: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 

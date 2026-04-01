@@ -130,7 +130,7 @@ async function loadUsers() {
     const users = await get('/admin/users');
     container.innerHTML = `
     <div class="table-wrapper"><table>
-      <thead><tr><th>Username</th><th>Email</th><th>Perfil</th><th>Estado</th><th>2FA</th><th>Último login</th><th>Ações</th></tr></thead>
+      <thead><tr><th>Username</th><th>Email</th><th>Perfil</th><th>Estado</th><th>2FA</th><th>Senha</th><th>Último login</th><th>Ações</th></tr></thead>
       <tbody>
         ${users.map(u => `
         <tr>
@@ -139,6 +139,7 @@ async function loadUsers() {
           <td><span class="badge ${u.role==='admin'?'badge-blue':'badge-gray'}">${u.role}</span></td>
           <td><span class="badge ${u.is_active?'badge-green':'badge-red'}">${u.is_active?'Ativo':'Inativo'}</span></td>
           <td>${u.two_factor_enabled?'<span class="badge badge-green">✓ Ativo</span>':'<span class="badge badge-gray">Não</span>'}</td>
+          <td>${u.must_change_password?'<span class="badge badge-red" title="Utilizador deve alterar a senha no próximo login">⚠ Alterar</span>':'<span class="badge badge-green">✓ OK</span>'}</td>
           <td class="text-sm text-gray">${u.last_login_at ? new Date(u.last_login_at).toLocaleString('pt-PT') : 'Nunca'}</td>
           <td>
             <button class="btn btn-sm btn-${u.is_active?'danger':'success'}" onclick="toggleUser(${u.id},${!u.is_active})">${u.is_active?'Desativar':'Ativar'}</button>
@@ -151,11 +152,12 @@ async function loadUsers() {
       try { await put(`/admin/users/${id}`, { is_active: active }); toast('Utilizador atualizado'); loadUsers(); } catch (e) { toast(e.message, 'error'); }
     };
     window.resetPassword = (id, username) => {
-      const nova = prompt(`Nova senha para "${username}" (mínimo 6 caracteres):`);
-      if (!nova) return;
-      if (nova.length < 6) { toast('Senha demasiado curta (mínimo 6 caracteres)', 'error'); return; }
-      put(`/admin/users/${id}`, { password: nova })
-        .then(() => toast(`Senha de "${username}" reposta com sucesso`, 'success'))
+      const nova = prompt(`Nova senha para "${username}" (mínimo 6 caracteres):\n\nDeixe em branco para usar a senha padrão: Sigms@2026!`);
+      if (nova === null) return; // cancelled
+      const senha = nova.trim() || 'Sigms@2026!';
+      if (senha.length < 6) { toast('Senha demasiado curta (mínimo 6 caracteres)', 'error'); return; }
+      put(`/admin/users/${id}`, { password: senha })
+        .then(() => { toast(`Senha de "${username}" reposta. O utilizador deverá alterar no próximo login.`, 'success'); loadUsers(); })
         .catch(e => toast(e.message, 'error'));
     };
   } catch (e) {
