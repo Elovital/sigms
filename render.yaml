@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: sigms-elovital
+    env: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        value: sqlite+aiosqlite:////data/sigms.db
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ENCRYPTION_KEY
+        generateValue: true
+    disk:
+      name: sigms-data
+      mountPath: /data
+      sizeGB: 1
