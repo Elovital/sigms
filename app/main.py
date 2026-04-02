@@ -110,6 +110,7 @@ app.add_middleware(
 from app.routers import auth, clients, apolices, financeiro, sinistros, dashboard, admin, imports
 from app.routers import acompanhamento
 from app.routers import prospeccao
+from app.routers import ia
 
 app.include_router(auth.router)
 app.include_router(clients.router)
@@ -121,6 +122,7 @@ app.include_router(admin.router)
 app.include_router(imports.router)
 app.include_router(acompanhamento.router)
 app.include_router(prospeccao.router)
+app.include_router(ia.router)
 
 static_dir = Path("static")
 if static_dir.exists():

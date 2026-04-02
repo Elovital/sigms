@@ -7,6 +7,7 @@ let currentFilters = {};
 let editingId = null;
 let seguradoras = [];
 let ramos = [];
+let viewMode = 'table'; // 'table' | 'kanban'
 
 const ESTADOS = [
   { value: 'Nova', color: '#6366f1', emoji: '🆕' },
@@ -46,6 +47,10 @@ export async function renderProspeccao(container) {
           <option value="">Todos estados</option>
           ${ESTADOS.map(e => `<option value="${e.value}">${e.emoji} ${e.value}</option>`).join('')}
         </select>
+        <div style="display:flex;gap:4px;border:1px solid var(--gray-200);border-radius:6px;padding:2px">
+          <button id="btn-view-table" class="btn btn-sm" style="padding:4px 10px;font-size:12px" title="Vista de tabela">☰ Tabela</button>
+          <button id="btn-view-kanban" class="btn btn-sm" style="padding:4px 10px;font-size:12px" title="Vista Kanban">⬛ Kanban</button>
+        </div>
         <button class="btn btn-primary" id="btn-new-prosp">+ Nova Prospecção</button>
       </div>
     </div>
@@ -171,14 +176,36 @@ export async function renderProspeccao(container) {
   document.getElementById('btn-new-prosp').addEventListener('click', () => openProspModal());
   document.getElementById('btn-save-prosp').addEventListener('click', saveProspeccao);
   document.getElementById('prosp-search').addEventListener('input', debounce(e => {
-    currentFilters.q = e.target.value; currentPage = 1; loadTable();
+    currentFilters.q = e.target.value; currentPage = 1;
+    viewMode === 'kanban' ? loadKanban() : loadTable();
   }));
   document.getElementById('filter-estado-prosp').addEventListener('change', e => {
-    currentFilters.estado = e.target.value; currentPage = 1; loadTable();
+    currentFilters.estado = e.target.value; currentPage = 1;
+    viewMode === 'kanban' ? loadKanban() : loadTable();
   });
 
+  function setView(mode) {
+    viewMode = mode;
+    const btnT = document.getElementById('btn-view-table');
+    const btnK = document.getElementById('btn-view-kanban');
+    const pag = document.getElementById('prosp-pagination');
+    if (mode === 'kanban') {
+      btnK.style.background = 'var(--primary)'; btnK.style.color = '#fff';
+      btnT.style.background = ''; btnT.style.color = '';
+      pag.classList.add('hidden');
+      loadKanban();
+    } else {
+      btnT.style.background = 'var(--primary)'; btnT.style.color = '#fff';
+      btnK.style.background = ''; btnK.style.color = '';
+      pag.classList.remove('hidden');
+      loadTable();
+    }
+  }
+  document.getElementById('btn-view-table').addEventListener('click', () => setView('table'));
+  document.getElementById('btn-view-kanban').addEventListener('click', () => setView('kanban'));
+  setView('table');
+
   loadStats();
-  loadTable();
 }
 
 async function loadStats() {
@@ -263,6 +290,58 @@ async function loadTable() {
 }
 
 window.changeProspPage = p => { currentPage = p; loadTable(); };
+
+async function loadKanban() {
+  const container = document.getElementById('prosp-table-container');
+  container.innerHTML = `<div class="loading"><div class="spinner"></div></div>`;
+  try {
+    const params = new URLSearchParams({ page: 1, size: 200 });
+    if (currentFilters.q) params.set('q', currentFilters.q);
+    const data = await get(`/prospeccao?${params}`);
+    const items = data.items || [];
+
+    const KANBAN_COLS = [
+      { value: 'Nova', label: '🆕 Nova', color: '#6366f1' },
+      { value: 'Cotação Enviada', label: '📤 Cotação Enviada', color: '#0ea5e9' },
+      { value: 'Aguarda Seguradora', label: '⏳ Aguarda Seg.', color: '#f59e0b' },
+      { value: 'Aguarda Cliente', label: '📞 Aguarda Cliente', color: '#f97316' },
+      { value: 'Aguarda Pagamento', label: '💳 Aguarda Pag.', color: '#8b5cf6' },
+      { value: 'Convertida', label: '✅ Convertida', color: '#22c55e' },
+    ];
+
+    const byEstado = Object.fromEntries(KANBAN_COLS.map(c => [c.value, []]));
+    items.forEach(p => { if (byEstado[p.estado]) byEstado[p.estado].push(p); });
+
+    container.innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;padding:16px;overflow-x:auto">
+      ${KANBAN_COLS.map(col => `
+      <div style="min-width:180px">
+        <div style="padding:8px 12px;border-radius:6px 6px 0 0;background:${col.color}22;border:1px solid ${col.color}44;border-bottom:2px solid ${col.color};margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:12px;font-weight:700;color:${col.color}">${col.label}</span>
+          <span style="font-size:11px;background:${col.color};color:#fff;border-radius:10px;padding:1px 7px;font-weight:700">${byEstado[col.value].length}</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px;min-height:60px">
+          ${byEstado[col.value].length === 0
+            ? `<div style="border:1.5px dashed var(--gray-200);border-radius:6px;height:48px;display:flex;align-items:center;justify-content:center"><span style="font-size:11px;color:var(--gray-400)">Sem itens</span></div>`
+            : byEstado[col.value].map(p => `
+          <div style="background:#fff;border:1px solid var(--gray-200);border-radius:6px;padding:10px;box-shadow:0 1px 2px rgba(0,0,0,.05);cursor:default"
+               title="Clique para editar" onclick="editProsp(${p.id})">
+            <div style="font-size:12px;font-weight:600;color:var(--gray-900);margin-bottom:4px;line-height:1.3">${escK(p.titulo)}</div>
+            <div style="font-size:11px;color:var(--gray-500);margin-bottom:6px">${escK(p.client_nome || '')}</div>
+            ${p.premio_estimado ? `<div style="font-size:11px;font-weight:700;color:var(--primary)">${formatAKZ(p.premio_estimado)}</div>` : ''}
+            ${p.data_seguimento ? `<div style="font-size:10px;color:var(--gray-400);margin-top:4px">📅 ${formatDate(p.data_seguimento)}</div>` : ''}
+          </div>`).join('')}
+        </div>
+      </div>`).join('')}
+    </div>`;
+  } catch (e) {
+    container.innerHTML = `<div class="alert alert-danger" style="margin:16px">${e.message}</div>`;
+  }
+}
+
+function escK(str) {
+  return String(str ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
 
 window.editProsp = async (id) => {
   try { const p = await get(`/prospeccao/${id}`); openProspModal(p); } catch (e) { toast(e.message, 'error'); }

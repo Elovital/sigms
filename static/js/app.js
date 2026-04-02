@@ -10,6 +10,7 @@ import { renderAdmin } from './admin.js';
 import { renderAcompanhamento } from './acompanhamento.js';
 import { renderProspeccao } from './prospeccao.js';
 import { renderPerfil } from './perfil.js';
+import { renderIA } from './ia.js';
 
 const SIDEBAR_ITEMS = [
     { hash: '#/', icon: '🏠', label: 'Dashboard' },
@@ -23,6 +24,8 @@ const SIDEBAR_ITEMS = [
     { hash: '#/financeiro', icon: '💰', label: 'Recibos & Comissões' },
     { section: 'Operacional' },
     { hash: '#/sinistros', icon: '⚠️', label: 'Sinistros' },
+    { section: 'Inteligência' },
+    { hash: '#/ia', icon: '🧠', label: 'IA Insights' },
     { section: 'Sistema' },
     { hash: '#/admin', icon: '⚙️', label: 'Administração', adminOnly: true },
 ];
@@ -102,6 +105,7 @@ const ROUTES = {
     '/prospeccao': { title: 'Prospecção', render: (c) => renderProspeccao(c) },
     '/acompanhamento': { title: 'Acompanhamento de Vendas', render: (c) => renderAcompanhamento(c) },
     '/admin': { title: 'Administração', render: (c) => renderAdmin(c) },
+    '/ia': { title: 'IA Insights', render: (c) => renderIA(c) },
     '/perfil': { title: 'Meu Perfil', render: (c) => renderPerfil(c, currentUser) },
 };
 
