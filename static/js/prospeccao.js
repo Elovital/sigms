@@ -295,8 +295,9 @@ async function loadKanban() {
   const container = document.getElementById('prosp-table-container');
   container.innerHTML = `<div class="loading"><div class="spinner"></div></div>`;
   try {
-    const params = new URLSearchParams({ page: 1, size: 200 });
+    const params = new URLSearchParams({ page: 1, size: 100 });
     if (currentFilters.q) params.set('q', currentFilters.q);
+    if (currentFilters.estado) params.set('estado', currentFilters.estado);
     const data = await get(`/prospeccao?${params}`);
     const items = data.items || [];
 
