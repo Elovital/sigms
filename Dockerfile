@@ -14,9 +14,11 @@ RUN mkdir -p data/backups data/archive
 
 EXPOSE 8000
 
-# Ensure /data directory exists and seed DB on first deploy
+# Point the database to the Render persistent disk at /data/sigms.db
+# Create symlinks so relative paths (./data/*) resolve to the persistent mount
 CMD mkdir -p /data/backups /data/archive && \
-    if [ ! -f /data/sigms.db ] && [ -f /app/data/sigms.db ]; then \
-      cp /app/data/sigms.db /data/sigms.db; \
-    fi && \
+    mkdir -p /app/data && \
+    ln -sf /data/sigms.db /app/data/sigms.db && \
+    ln -sf /data/backups /app/data/backups && \
+    ln -sf /data/archive /app/data/archive && \
     uvicorn app.main:app --host 0.0.0.0 --port 8000
