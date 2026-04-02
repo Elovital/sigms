@@ -313,9 +313,9 @@ async function loadKanban() {
     items.forEach(p => { if (byEstado[p.estado]) byEstado[p.estado].push(p); });
 
     container.innerHTML = `
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;padding:16px;overflow-x:auto">
+    <div style="display:flex;gap:12px;padding:16px;overflow-x:auto;align-items:flex-start">
       ${KANBAN_COLS.map(col => `
-      <div style="min-width:180px">
+      <div style="flex:0 0 210px;min-width:210px">
         <div style="padding:8px 12px;border-radius:6px 6px 0 0;background:${col.color}22;border:1px solid ${col.color}44;border-bottom:2px solid ${col.color};margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">
           <span style="font-size:12px;font-weight:700;color:${col.color}">${col.label}</span>
           <span style="font-size:11px;background:${col.color};color:#fff;border-radius:10px;padding:1px 7px;font-weight:700">${byEstado[col.value].length}</span>

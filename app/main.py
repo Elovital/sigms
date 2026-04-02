@@ -70,6 +70,7 @@ async def seed_defaults():
             ("VIDA", "Vida"),
             ("SAUDE", "Saúde"),
             ("AT", "Acidentes de Trabalho"),
+            ("MO", "Medicina Ocupacional"),
             ("MULTI", "Multirriscos"),
             ("RC", "Responsabilidade Civil"),
             ("VIAGEM", "Viagem"),

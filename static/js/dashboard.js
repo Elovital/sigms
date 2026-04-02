@@ -23,6 +23,17 @@ export async function renderDashboard(container) {
     </div>
   </div>
 
+  <!-- Prospecção Ativa card -->
+  <div class="card">
+    <div class="card-header" style="justify-content:space-between">
+      <span class="card-title">🎯 Prospecção Ativa</span>
+      <a href="#/prospeccao" style="font-size:12px;color:var(--primary);text-decoration:none;font-weight:500">Ver tudo →</a>
+    </div>
+    <div id="prosp-card-body">
+      <div class="loading"><div class="spinner"></div> A carregar...</div>
+    </div>
+  </div>
+
   <div class="card">
     <div class="card-header">
       <span class="card-title">🔔 Ações Prioritárias - Renovações em 30 dias</span>
@@ -35,6 +46,7 @@ export async function renderDashboard(container) {
 
   loadKPIs();
   loadCharts();
+  loadProspCard();
   loadQuickActions();
 }
 
@@ -152,6 +164,60 @@ async function loadCharts() {
       });
     }
   } catch (e) { console.error('Charts error:', e); }
+}
+
+async function loadProspCard() {
+  const body = document.getElementById('prosp-card-body');
+  try {
+    const stats = await get('/prospeccao/stats');
+    const FUNIL = [
+      { key: 'Nova',               emoji: '🆕', color: '#6366f1' },
+      { key: 'Cotação Enviada',     emoji: '📤', color: '#0ea5e9' },
+      { key: 'Aguarda Seguradora',  emoji: '⏳', color: '#f59e0b' },
+      { key: 'Aguarda Cliente',     emoji: '📞', color: '#f97316' },
+      { key: 'Aguarda Pagamento',   emoji: '💳', color: '#8b5cf6' },
+    ];
+    const totalAtivo = FUNIL.reduce((s, f) => s + (stats[f.key] || 0), 0);
+    const convertidas = stats['Convertida'] || 0;
+    const perdidas = stats['Perdida'] || 0;
+    const taxaConversao = (totalAtivo + convertidas + perdidas) > 0
+      ? Math.round(convertidas / (totalAtivo + convertidas + perdidas) * 100)
+      : 0;
+
+    body.innerHTML = `
+    <div style="padding:16px 20px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+        <div style="flex:1;min-width:100px;text-align:center;padding:12px;background:var(--primary-light);border-radius:8px">
+          <div style="font-size:28px;font-weight:700;color:var(--primary)">${totalAtivo}</div>
+          <div style="font-size:11px;color:var(--gray-500);margin-top:2px">Em curso</div>
+        </div>
+        <div style="flex:1;min-width:100px;text-align:center;padding:12px;background:var(--success-light);border-radius:8px">
+          <div style="font-size:28px;font-weight:700;color:var(--success)">${convertidas}</div>
+          <div style="font-size:11px;color:var(--gray-500);margin-top:2px">Convertidas</div>
+        </div>
+        <div style="flex:1;min-width:100px;text-align:center;padding:12px;background:var(--info-light);border-radius:8px">
+          <div style="font-size:28px;font-weight:700;color:var(--info)">${taxaConversao}%</div>
+          <div style="font-size:11px;color:var(--gray-500);margin-top:2px">Taxa Conversão</div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        ${FUNIL.map(f => {
+          const n = stats[f.key] || 0;
+          const pct = totalAtivo > 0 ? Math.round(n / totalAtivo * 100) : 0;
+          return `
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="width:140px;font-size:12px;color:var(--gray-700)">${f.emoji} ${f.key}</span>
+            <div style="flex:1;height:8px;background:var(--gray-200);border-radius:4px;overflow:hidden">
+              <div style="height:100%;width:${pct}%;background:${f.color};border-radius:4px;transition:width .6s ease"></div>
+            </div>
+            <span style="width:24px;text-align:right;font-size:12px;font-weight:700;color:${f.color}">${n}</span>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+  } catch (e) {
+    body.innerHTML = `<div class="alert alert-danger" style="margin:16px">${e.message}</div>`;
+  }
 }
 
 async function loadQuickActions() {

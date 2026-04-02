@@ -12,6 +12,7 @@ export async function renderFinanceiro(container, currentUser = null) {
   <div class="tabs" id="fin-tabs">
     <div class="tab active" data-tab="pagamentos">Recibos / Pagamentos</div>
     <div class="tab" data-tab="comissoes">Comissões</div>
+    <div class="tab" data-tab="compliance">⚖️ Compliance</div>
     <div class="tab" data-tab="novo-premio">Registar Prémio</div>
   </div>
 
@@ -115,6 +116,13 @@ export async function renderFinanceiro(container, currentUser = null) {
   </div>
 </div>
 
+<!-- Compliance Tab -->
+<div id="tab-compliance" class="hidden">
+  <div id="compliance-content">
+    <div class="loading"><div class="spinner"></div> A carregar dados de compliance...</div>
+  </div>
+</div>
+
 <!-- Comissão Edit Modal -->
 <div class="modal-overlay hidden" id="comissao-edit-modal">
   <div class="modal" style="max-width:400px">
@@ -145,8 +153,10 @@ export async function renderFinanceiro(container, currentUser = null) {
     tab.addEventListener('click', () => {
       document.querySelectorAll('#fin-tabs .tab').forEach(t => t.classList.remove('active'));
       tab.classList.add('active');
-      ['pagamentos', 'comissoes', 'novo-premio'].forEach(t =>
+      const tabs = ['pagamentos', 'comissoes', 'compliance', 'novo-premio'];
+      tabs.forEach(t =>
         document.getElementById(`tab-${t}`)?.classList.toggle('hidden', t !== tab.dataset.tab));
+      if (tab.dataset.tab === 'compliance') loadCompliance();
     });
   });
 
@@ -316,5 +326,76 @@ async function savePremio() {
     errEl.textContent = e.message; errEl.classList.remove('hidden');
   } finally {
     btn.disabled = false;
+  }
+}
+
+async function loadCompliance() {
+  const body = document.getElementById('compliance-content');
+  if (!body) return;
+  body.innerHTML = `<div class="loading"><div class="spinner"></div> A calcular compliance...</div>`;
+  try {
+    const d = await get('/financeiro/compliance');
+
+    const badge = (estado) => {
+      if (estado === 'vencido') return `<span class="badge badge-red">⛔ Vencido</span>`;
+      if (estado === 'urgente') return `<span class="badge badge-yellow">⚠️ Urgente</span>`;
+      return `<span class="badge badge-green">✅ OK</span>`;
+    };
+
+    body.innerHTML = `
+    <!-- KPI row -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:16px">
+      <div class="card" style="padding:16px;text-align:center">
+        <div style="font-size:22px;font-weight:700;color:var(--primary)">${formatAKZ(d.iss_estimado)}</div>
+        <div style="font-size:11px;color:var(--gray-500);margin-top:4px">ISS Estimado (ano)</div>
+        <div style="font-size:10px;color:var(--gray-400)">2% sobre comissões recebidas</div>
+      </div>
+      <div class="card" style="padding:16px;text-align:center">
+        <div style="font-size:22px;font-weight:700;color:var(--info)">${formatAKZ(d.imposto_selo_estimado)}</div>
+        <div style="font-size:11px;color:var(--gray-500);margin-top:4px">Imposto Selo Estimado (ano)</div>
+        <div style="font-size:10px;color:var(--gray-400)">0,3% sobre prémios</div>
+      </div>
+      <div class="card" style="padding:16px;text-align:center">
+        <div style="font-size:22px;font-weight:700;color:${d.comissoes_vencidas > 0 ? 'var(--danger)' : 'var(--success)'}">${d.comissoes_vencidas}</div>
+        <div style="font-size:11px;color:var(--gray-500);margin-top:4px">Comissões não reconciliadas</div>
+        <div style="font-size:10px;color:var(--gray-400)">Previstas há +60 dias</div>
+      </div>
+      <div class="card" style="padding:16px;text-align:center">
+        <div style="font-size:22px;font-weight:700;color:${d.apolices_sem_premio > 0 ? 'var(--warning)' : 'var(--success)'}">${d.apolices_sem_premio}</div>
+        <div style="font-size:11px;color:var(--gray-500);margin-top:4px">Apólices sem prémio</div>
+        <div style="font-size:10px;color:var(--gray-400)">Apólices ativas sem registo</div>
+      </div>
+      <div class="card" style="padding:16px;text-align:center">
+        <div style="font-size:22px;font-weight:700;color:${d.pagamentos_criticos > 0 ? 'var(--danger)' : 'var(--success)'}">${d.pagamentos_criticos}</div>
+        <div style="font-size:11px;color:var(--gray-500);margin-top:4px">Pagamentos críticos</div>
+        <div style="font-size:10px;color:var(--gray-400)">Atrasados há +30 dias</div>
+      </div>
+    </div>
+
+    <!-- ARSEG Deadlines -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">📋 Prazos Regulatórios — ARSEG & Fiscais</span>
+      </div>
+      <div class="table-wrapper">
+        <table>
+          <thead><tr><th>Prazo</th><th>Descrição</th><th>Tipo</th><th>Dias Restantes</th><th>Estado</th></tr></thead>
+          <tbody>
+            ${d.arseg_deadlines.map(dl => `
+            <tr>
+              <td class="font-mono">${dl.prazo}</td>
+              <td>${dl.descricao}</td>
+              <td><span class="badge badge-blue">${dl.tipo}</span></td>
+              <td style="font-weight:600;color:${dl.dias_restantes < 0 ? 'var(--danger)' : dl.dias_restantes <= 15 ? 'var(--warning)' : 'var(--success)'}">
+                ${dl.dias_restantes < 0 ? `${Math.abs(dl.dias_restantes)}d em atraso` : `${dl.dias_restantes}d`}
+              </td>
+              <td>${badge(dl.estado)}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+  } catch (e) {
+    body.innerHTML = `<div class="alert alert-danger" style="margin:16px">${e.message}</div>`;
   }
 }

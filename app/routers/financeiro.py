@@ -214,3 +214,78 @@ async def financial_summary(db: AsyncSession = Depends(get_db), current_user: Us
         "comissoes_recebidas": round(comissoes_recebidas, 2),
         "pagamentos_atrasados": pagamentos_atrasados,
     }
+
+
+@router.get("/compliance")
+async def get_compliance(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Compliance dashboard: ISS, Imposto Selo, ARSEG deadlines, anomalies."""
+    from datetime import timedelta
+    from app.models.apolice import Apolice
+    from app.models.client import Client
+
+    today = date.today()
+    first_of_month = today.replace(day=1)
+    first_of_year = today.replace(month=1, day=1)
+
+    # ISS total acumulado no ano (2% sobre comissões recebidas)
+    comissoes_ano = (await db.execute(
+        select(func.sum(Comissao.valor))
+        .where(Comissao.estado == "Recebida", Comissao.data_referencia >= first_of_year.isoformat())
+    )).scalar() or 0.0
+    iss_estimado = round(comissoes_ano * 0.02, 2)
+
+    # Imposto Selo acumulado no ano (prémios × 0.3%)
+    premios_ano = (await db.execute(
+        select(func.sum(Premio.premio_base))
+        .where(Premio.created_at >= first_of_year.isoformat())
+    )).scalar() or 0.0
+    imposto_selo_estimado = round(premios_ano * 0.003, 2)
+
+    # Comissões não reconciliadas (Previstas com mais de 60 dias)
+    cutoff_60 = (today - timedelta(days=60)).isoformat()
+    comissoes_vencidas = (await db.execute(
+        select(func.count())
+        .where(Comissao.estado == "Prevista", Comissao.data_referencia <= cutoff_60)
+    )).scalar() or 0
+
+    # Apólices sem prémio registado
+    apolices_sem_premio = (await db.execute(
+        select(func.count(Apolice.id))
+        .outerjoin(Premio, Premio.apolice_id == Apolice.id)
+        .where(Apolice.estado == "Ativa", Apolice.deleted_at.is_(None), Premio.id.is_(None))
+    )).scalar() or 0
+
+    # Pagamentos atrasados > 30 dias
+    cutoff_30 = (today - timedelta(days=30)).isoformat()
+    pagamentos_criticos = (await db.execute(
+        select(func.count())
+        .where(Pagamento.estado == "Atrasado", Pagamento.data_vencimento <= cutoff_30)
+    )).scalar() or 0
+
+    # Próximos prazos ARSEG (fixos por regulamento angolano)
+    year = today.year
+    arseg_deadlines = [
+        {"prazo": f"{year}-03-31", "descricao": "Mapa Anual de Produção — ARSEG", "tipo": "ARSEG"},
+        {"prazo": f"{year}-06-30", "descricao": "Relatório Semestral de Comissões — ARSEG", "tipo": "ARSEG"},
+        {"prazo": f"{year}-09-30", "descricao": "Mapa de Sinistros 1º Semestre — ARSEG", "tipo": "ARSEG"},
+        {"prazo": f"{year}-12-31", "descricao": "Relatório Anual de Atividade — ARSEG", "tipo": "ARSEG"},
+        {"prazo": f"{today.year}-{today.month:02d}-{25:02d}", "descricao": "Declaração Mensal de ISS (até dia 25)", "tipo": "ISS"},
+    ]
+    for d in arseg_deadlines:
+        diff = (date.fromisoformat(d["prazo"]) - today).days
+        d["dias_restantes"] = diff
+        d["estado"] = "vencido" if diff < 0 else "urgente" if diff <= 15 else "ok"
+
+    arseg_deadlines.sort(key=lambda x: x["prazo"])
+
+    return {
+        "iss_estimado": iss_estimado,
+        "imposto_selo_estimado": imposto_selo_estimado,
+        "comissoes_vencidas": comissoes_vencidas,
+        "apolices_sem_premio": apolices_sem_premio,
+        "pagamentos_criticos": pagamentos_criticos,
+        "arseg_deadlines": arseg_deadlines,
+    }
