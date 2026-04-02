@@ -1,5 +1,6 @@
 .venv/
 venv/
+data/sigms.db
 data/backups/
 data/archive/
 .env
