@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
+from sqlalchemy.orm import selectinload
 from pathlib import Path
 import shutil
 from datetime import datetime, timezone
@@ -50,7 +51,11 @@ class SinistroUpdate(BaseModel):
 def _sinistro_dict(s: Sinistro) -> dict:
     return {
         "id": s.id, "numero_processo": s.numero_processo,
-        "apolice_id": s.apolice_id, "client_id": s.client_id,
+        "apolice_id": s.apolice_id,
+        "apolice_numero": s.apolice.numero if s.apolice else None,
+        "client_id": s.client_id,
+        "client_nome": s.client.nome if s.client else None,
+        "client_nif": s.client.nif if s.client else None,
         "data_sinistro": s.data_sinistro, "data_participacao": s.data_participacao,
         "descricao": s.descricao, "estado": s.estado,
         "valor_estimado": s.valor_estimado, "valor_pago": s.valor_pago,
@@ -69,16 +74,22 @@ async def list_sinistros(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    stmt = select(Sinistro)
+    filters = []
     if estado:
-        stmt = stmt.where(Sinistro.estado == estado)
+        filters.append(Sinistro.estado == estado)
     if apolice_id:
-        stmt = stmt.where(Sinistro.apolice_id == apolice_id)
+        filters.append(Sinistro.apolice_id == apolice_id)
     if client_id:
-        stmt = stmt.where(Sinistro.client_id == client_id)
-    count_stmt = select(func.count()).select_from(stmt.subquery())
+        filters.append(Sinistro.client_id == client_id)
+
+    count_stmt = select(func.count()).select_from(
+        select(Sinistro).where(*filters).subquery()
+    )
     total = (await db.execute(count_stmt)).scalar()
-    stmt = stmt.offset((page - 1) * size).limit(size).order_by(Sinistro.data_sinistro.desc())
+
+    stmt = select(Sinistro).options(
+        selectinload(Sinistro.apolice), selectinload(Sinistro.client)
+    ).where(*filters).offset((page - 1) * size).limit(size).order_by(Sinistro.data_sinistro.desc())
     result = await db.execute(stmt)
     return {"total": total, "items": [_sinistro_dict(s) for s in result.scalars().all()]}
 
@@ -97,7 +108,11 @@ async def create_sinistro(body: SinistroIn, db: AsyncSession = Depends(get_db), 
 
 @router.get("/{sinistro_id}")
 async def get_sinistro(sinistro_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
-    result = await db.execute(select(Sinistro).where(Sinistro.id == sinistro_id))
+    result = await db.execute(
+        select(Sinistro).options(
+            selectinload(Sinistro.apolice), selectinload(Sinistro.client), selectinload(Sinistro.docs)
+        ).where(Sinistro.id == sinistro_id)
+    )
     sinistro = result.scalar_one_or_none()
     if not sinistro:
         raise HTTPException(status_code=404, detail="Sinistro não encontrado")
@@ -126,7 +141,13 @@ async def update_sinistro(sinistro_id: int, body: SinistroUpdate, db: AsyncSessi
 
     sinistro.updated_at = datetime.now(timezone.utc)
     await db.commit()
-    return _sinistro_dict(sinistro)
+    # Reload with relationships for the response
+    result2 = await db.execute(
+        select(Sinistro).options(
+            selectinload(Sinistro.apolice), selectinload(Sinistro.client)
+        ).where(Sinistro.id == sinistro_id)
+    )
+    return _sinistro_dict(result2.scalar_one())
 
 
 @router.post("/{sinistro_id}/docs")

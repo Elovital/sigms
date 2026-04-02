@@ -51,13 +51,19 @@ export async function renderSinistros(container) {
         </div>
       </div>
       <div class="form-row">
-        <div class="form-group">
-          <label>ID da Apólice *</label>
-          <input type="number" id="sin-apolice-id">
+        <div class="form-group" style="position:relative">
+          <label>Apólice *</label>
+          <input type="text" id="sin-apolice-search" placeholder="Pesquisar por número de apólice...">
+          <input type="hidden" id="sin-apolice-id">
+          <div id="sin-apolice-suggestions" style="border:1px solid var(--gray-200);border-radius:6px;max-height:150px;overflow-y:auto;display:none;background:white;position:absolute;z-index:100;width:100%"></div>
+          <div class="field-hint" id="sin-apolice-selected"></div>
         </div>
-        <div class="form-group">
-          <label>ID do Cliente *</label>
-          <input type="number" id="sin-client-id">
+        <div class="form-group" style="position:relative">
+          <label>Cliente *</label>
+          <input type="text" id="sin-client-search" placeholder="Pesquisar cliente por nome ou NIF...">
+          <input type="hidden" id="sin-client-id">
+          <div id="sin-client-suggestions" style="border:1px solid var(--gray-200);border-radius:6px;max-height:150px;overflow-y:auto;display:none;background:white;position:absolute;z-index:100;width:100%"></div>
+          <div class="field-hint" id="sin-client-selected"></div>
         </div>
       </div>
       <div class="form-row">
@@ -76,11 +82,11 @@ export async function renderSinistros(container) {
       </div>
       <div class="form-row">
         <div class="form-group">
-          <label>Valor Estimado (€)</label>
+          <label>Valor Estimado (AKZ)</label>
           <input type="number" id="sin-valor-est" step="0.01">
         </div>
         <div class="form-group">
-          <label>Valor Pago (€)</label>
+          <label>Valor Pago (AKZ)</label>
           <input type="number" id="sin-valor-pago" step="0.01">
         </div>
       </div>
@@ -108,6 +114,62 @@ export async function renderSinistros(container) {
   document.getElementById('btn-save-sinistro').addEventListener('click', saveSinistro);
   document.getElementById('sin-filter').addEventListener('change', () => { currentPage = 1; loadSinistros(); });
   loadSinistros();
+
+  // Apólice search
+  document.getElementById('sin-apolice-search').addEventListener('input', debounce(async e => {
+    const q = e.target.value.trim();
+    if (q.length < 2) { document.getElementById('sin-apolice-suggestions').style.display = 'none'; return; }
+    try {
+      const data = await get(`/apolices?q=${encodeURIComponent(q)}&size=8`);
+      const sugg = document.getElementById('sin-apolice-suggestions');
+      const items = data.items || [];
+      sugg.innerHTML = items.map(a =>
+        `<div style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--gray-100)"
+          onmousedown="selectSinApolice(${a.id},'${escSin(a.numero)}',${a.client_id || 'null'},'${escSin(a.client_nome || '')}','${escSin(a.client_nif || '')}')">
+          <strong>${a.numero}</strong> <span style="font-size:12px;color:var(--gray-500)">${a.client_nome || ''}</span>
+          <span style="font-size:11px;color:var(--gray-400);margin-left:4px">${a.ramo || ''}</span>
+        </div>`
+      ).join('');
+      sugg.style.display = items.length ? 'block' : 'none';
+    } catch {}
+  }, 300));
+
+  // Client search
+  document.getElementById('sin-client-search').addEventListener('input', debounce(async e => {
+    const q = e.target.value.trim();
+    if (q.length < 2) { document.getElementById('sin-client-suggestions').style.display = 'none'; return; }
+    try {
+      const data = await get(`/clients?q=${encodeURIComponent(q)}&size=6`);
+      const sugg = document.getElementById('sin-client-suggestions');
+      const items = data.items || [];
+      sugg.innerHTML = items.map(c =>
+        `<div style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--gray-100)"
+          onmousedown="selectSinClient(${c.id},'${escSin(c.nome)}','${escSin(c.nif || '')}')">
+          ${c.nome} <span style="font-family:monospace;font-size:12px;color:var(--gray-400)">${c.nif || ''}</span>
+        </div>`
+      ).join('');
+      sugg.style.display = items.length ? 'block' : 'none';
+    } catch {}
+  }, 300));
+
+  window.selectSinApolice = (id, numero, clientId, clientNome, clientNif) => {
+    document.getElementById('sin-apolice-id').value = id;
+    document.getElementById('sin-apolice-search').value = numero;
+    document.getElementById('sin-apolice-suggestions').style.display = 'none';
+    document.getElementById('sin-apolice-selected').textContent = clientNome ? `Cliente: ${clientNome}` : '';
+    if (clientId) {
+      document.getElementById('sin-client-id').value = clientId;
+      document.getElementById('sin-client-search').value = clientNome + (clientNif ? ` (${clientNif})` : '');
+      document.getElementById('sin-client-selected').textContent = '';
+    }
+  };
+
+  window.selectSinClient = (id, nome, nif) => {
+    document.getElementById('sin-client-id').value = id;
+    document.getElementById('sin-client-search').value = `${nome}${nif ? ' (' + nif + ')' : ''}`;
+    document.getElementById('sin-client-suggestions').style.display = 'none';
+    document.getElementById('sin-client-selected').textContent = '';
+  };
 }
 
 async function loadSinistros() {
@@ -125,12 +187,13 @@ async function loadSinistros() {
     }
     container.innerHTML = `
     <div class="table-wrapper"><table>
-      <thead><tr><th>Processo</th><th>Apólice</th><th>Data</th><th>Estado</th><th>Valor Est.</th><th>Valor Pago</th><th>Ações</th></tr></thead>
+      <thead><tr><th>Processo</th><th>Apólice</th><th>Cliente</th><th>Data</th><th>Estado</th><th>Valor Est.</th><th>Valor Pago</th><th>Ações</th></tr></thead>
       <tbody>
         ${items.map(s => `
         <tr>
           <td class="font-mono"><strong>${s.numero_processo}</strong></td>
-          <td>${s.apolice_id}</td>
+          <td class="font-mono" style="font-size:12px">${s.apolice_numero || s.apolice_id}</td>
+          <td style="font-size:12px">${s.client_nome || '-'}</td>
           <td>${formatDate(s.data_sinistro)}</td>
           <td>${estadoBadge(s.estado)}</td>
           <td class="text-right">${s.valor_estimado ? formatEuro(s.valor_estimado) : '-'}</td>
@@ -162,6 +225,10 @@ async function loadSinistros() {
   }
 }
 
+function escSin(str) {
+  return String(str ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+}
+
 window.changeSinPage = (p) => { currentPage = p; loadSinistros(); };
 window.editSinistro = async (id) => {
   try { const s = await get(`/sinistros/${id}`); openSinistroModal(s); } catch (e) { toast(e.message, 'error'); }
@@ -181,7 +248,13 @@ function openSinistroModal(s = null) {
   document.getElementById('sin-numero').disabled = !!s;
   document.getElementById('sin-estado').value = s?.estado || 'Aberto';
   document.getElementById('sin-apolice-id').value = s?.apolice_id || '';
+  document.getElementById('sin-apolice-search').value = s?.apolice_numero || (s?.apolice_id ? `Apólice ${s.apolice_id}` : '');
+  document.getElementById('sin-apolice-selected').textContent = s?.client_nome ? `Cliente: ${s.client_nome}` : '';
   document.getElementById('sin-client-id').value = s?.client_id || '';
+  document.getElementById('sin-client-search').value = s?.client_nome
+    ? `${s.client_nome}${s.client_nif ? ' (' + s.client_nif + ')' : ''}`
+    : (s?.client_id ? `Cliente ${s.client_id}` : '');
+  document.getElementById('sin-client-selected').textContent = '';
   document.getElementById('sin-data').value = s?.data_sinistro || '';
   document.getElementById('sin-data-part').value = s?.data_participacao || '';
   document.getElementById('sin-descricao').value = s?.descricao || '';

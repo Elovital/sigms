@@ -20,6 +20,22 @@ const ESTADOS = [
   { value: 'Cancelada', color: '#6b7280', emoji: '🚫' },
 ];
 
+const NEXT_ESTADO = {
+  'Nova': 'Cotação Enviada',
+  'Cotação Enviada': 'Aguarda Seguradora',
+  'Aguarda Seguradora': 'Aguarda Cliente',
+  'Aguarda Cliente': 'Aguarda Pagamento',
+  'Aguarda Pagamento': 'Convertida',
+};
+
+const NEXT_LABEL = {
+  'Nova': '→ Cotação',
+  'Cotação Enviada': '→ Ag. Seguradora',
+  'Aguarda Seguradora': '→ Ag. Cliente',
+  'Aguarda Cliente': '→ Ag. Pagamento',
+  'Aguarda Pagamento': '→ Converter',
+};
+
 function estadoInfo(estado) {
   return ESTADOS.find(e => e.value === estado) || { color: '#6b7280', emoji: '•' };
 }
@@ -169,8 +185,18 @@ export async function renderProspeccao(container) {
 
   window.selectProspClient = (id, nome, nif) => {
     document.getElementById('p-client-id').value = id;
-    document.getElementById('p-client-search').value = `${nome} (${nif})`;
+    document.getElementById('p-client-search').value = `${nome}${nif ? ' (' + nif + ')' : ''}`;
     document.getElementById('p-client-suggestions').style.display = 'none';
+    // Fetch and show contact details
+    get(`/clients/${id}`).then(c => {
+      const info = [];
+      if (c.telefone) info.push(`📞 ${c.telefone}`);
+      if (c.email) info.push(`✉️ ${c.email}`);
+      if (c.morada) info.push(`📍 ${c.morada}`);
+      document.getElementById('p-client-selected').innerHTML = info.length
+        ? `<span style="color:var(--gray-600);font-size:12px">${info.join('&nbsp;&nbsp;·&nbsp;&nbsp;')}</span>`
+        : '';
+    }).catch(() => {});
   };
 
   document.getElementById('btn-new-prosp').addEventListener('click', () => openProspModal());
@@ -261,9 +287,10 @@ async function loadTable() {
           <td>${p.data_seguimento ? formatDate(p.data_seguimento) : '-'}</td>
           <td>${estadoBadgeProsp(p.estado)}</td>
           <td>
-            <div class="flex gap-2">
+            <div class="flex gap-2" style="flex-wrap:wrap;align-items:center">
+              ${NEXT_ESTADO[p.estado] ? `<button class="btn btn-sm btn-primary" onclick="advanceProsp(${p.id},'${NEXT_ESTADO[p.estado]}',${p.client_id || 'null'})" title="Avançar para ${NEXT_ESTADO[p.estado]}" style="font-size:11px;white-space:nowrap">${NEXT_LABEL[p.estado]}</button>` : ''}
               <button class="btn btn-sm btn-secondary" onclick="editProsp(${p.id})" title="Editar">✏️</button>
-              <button class="btn btn-sm btn-secondary" onclick="changeProspEstado(${p.id},'${p.titulo.replace(/'/g,"\\'")}','${p.estado}')" title="Alterar estado">🔄</button>
+              <button class="btn btn-sm btn-secondary" onclick="changeProspEstado(${p.id},'${p.titulo.replace(/'/g,"\\'")}','${p.estado}',${p.client_id || 'null'})" title="Alterar estado">🔄</button>
               <button class="btn btn-sm btn-danger" onclick="deleteProsp(${p.id})" title="Eliminar">🗑️</button>
             </div>
           </td>
@@ -344,6 +371,8 @@ function escK(str) {
   return String(str ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+window.advanceProsp = (id, estado, clientId) => applyEstado(id, estado, clientId);
+
 window.editProsp = async (id) => {
   try { const p = await get(`/prospeccao/${id}`); openProspModal(p); } catch (e) { toast(e.message, 'error'); }
 };
@@ -358,28 +387,50 @@ window.deleteProsp = async (id) => {
   } catch (e) { toast(e.message, 'error'); }
 };
 
-window.changeProspEstado = (id, titulo, estadoAtual) => {
+window.changeProspEstado = (id, titulo, estadoAtual, clientId) => {
   document.getElementById('prosp-estado-titulo').textContent = titulo;
   const btns = document.getElementById('estado-buttons');
   btns.innerHTML = ESTADOS.map(e => `
     <button class="btn btn-sm" style="background:${e.color}22;color:${e.color};border:1px solid ${e.color}44;${e.value===estadoAtual?'border-width:2px;font-weight:700':''}"
-      onclick="applyEstado(${id},'${e.value}')">${e.emoji} ${e.value}</button>`).join('');
+      onclick="applyEstado(${id},'${e.value}',${clientId || 'null'})">${e.emoji} ${e.value}</button>`).join('');
   document.getElementById('prosp-estado-modal').classList.remove('hidden');
 };
 
-window.applyEstado = async (id, estado) => {
+window.applyEstado = async (id, estado, clientId = null) => {
   try {
+    // Fetch prosp if converting (need full data) or if no clientId
+    let prosp = null;
+    if (estado === 'Convertida' || !clientId) {
+      prosp = await get(`/prospeccao/${id}`);
+      if (!clientId) clientId = prosp.client_id;
+    }
+
     await patch(`/prospeccao/${id}/estado?estado=${encodeURIComponent(estado)}`);
     toast(`Estado alterado para "${estado}"`);
-    document.getElementById('prosp-estado-modal').classList.add('hidden');
+    document.getElementById('prosp-estado-modal')?.classList.add('hidden');
+
+    // Auto-create interaction in Acompanhamento (fire-and-forget)
+    if (clientId) {
+      const today = new Date().toISOString().split('T')[0];
+      post('/acompanhamento/interacoes', {
+        client_id: clientId,
+        tipo: 'Atualização',
+        data_interacao: today,
+        hora: new Date().toTimeString().slice(0, 5),
+        assunto: `Prospecção avançada para "${estado}"`,
+        notas: 'Estado atualizado automaticamente pelo sistema.',
+        resultado: estado === 'Convertida' ? 'Positivo' : 'Pendente',
+        proximo_contacto: null,
+        lembrete_ativo: false,
+      }).catch(() => {});
+    }
 
     if (estado === 'Convertida') {
-      // Fetch the prospecção data and pass it to the apólices form
-      const prosp = await get(`/prospeccao/${id}`);
+      if (!prosp) prosp = await get(`/prospeccao/${id}`);
       sessionStorage.setItem('convert_prosp', JSON.stringify(prosp));
       window.location.hash = '#/apolices?from_prosp=1';
     } else {
-      loadTable();
+      viewMode === 'kanban' ? loadKanban() : loadTable();
       loadStats();
     }
   } catch (e) { toast(e.message, 'error'); }
@@ -401,9 +452,20 @@ function openProspModal(prosp = null) {
   if (prosp?.client_id) {
     document.getElementById('p-client-id').value = prosp.client_id;
     document.getElementById('p-client-search').value = prosp.client_nome ? `${prosp.client_nome}${prosp.client_nif ? ' (' + prosp.client_nif + ')' : ''}` : '';
+    // Fetch full client details to show contact info
+    get(`/clients/${prosp.client_id}`).then(c => {
+      const info = [];
+      if (c.telefone) info.push(`📞 ${c.telefone}`);
+      if (c.email) info.push(`✉️ ${c.email}`);
+      if (c.morada) info.push(`📍 ${c.morada}`);
+      document.getElementById('p-client-selected').innerHTML = info.length
+        ? `<span style="color:var(--gray-600);font-size:12px">${info.join('&nbsp;&nbsp;·&nbsp;&nbsp;')}</span>`
+        : '';
+    }).catch(() => {});
   } else {
     document.getElementById('p-client-id').value = '';
     document.getElementById('p-client-search').value = '';
+    document.getElementById('p-client-selected').innerHTML = '';
   }
   document.getElementById('prosp-form-error').classList.add('hidden');
   document.getElementById('prosp-modal').classList.remove('hidden');
