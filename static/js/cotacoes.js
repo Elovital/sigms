@@ -1,5 +1,5 @@
 /* SIGMS — Mapa Comparativo de Cotações (Saúde + Automóvel) */
-import { get, post } from './api.js';
+import { get, post, put, del } from './api.js';
 
 /* ═══════════════════════════ CONSTANTES ═══════════════════════════ */
 
@@ -101,6 +101,10 @@ function buildRoot() {
       style="padding:10px 20px;font-size:13px;font-weight:600;border:none;border-bottom:3px solid transparent;background:none;color:var(--gray-500);cursor:pointer;margin-bottom:-2px">
       🚗 Seguro Automóvel
     </button>
+    <button id="tab-historico" class="cot-tab" data-tab="historico"
+      style="padding:10px 20px;font-size:13px;font-weight:600;border:none;border-bottom:3px solid transparent;background:none;color:var(--gray-500);cursor:pointer;margin-bottom:-2px">
+      📋 Histórico
+    </button>
   </div>
 
   <!-- Conteúdo da tab -->
@@ -133,6 +137,12 @@ function bindTabEvents(segList) {
         b.style.borderBottom = active ? '3px solid var(--primary)' : '3px solid transparent';
         b.style.color = active ? 'var(--primary)' : 'var(--gray-500)';
       });
+      // Botões PDF/Email/Limpar apenas nas abas de cotação
+      const isHist = state.tab === 'historico';
+      ['btn-limpar','btn-pdf','btn-email'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = isHist ? 'none' : '';
+      });
       renderTab(segList);
     });
   });
@@ -149,10 +159,12 @@ function renderTab(segList) {
     el.innerHTML = buildSaudeLayout(segList);
     bindSaudeEvents(segList);
     updateSaude();
-  } else {
+  } else if (state.tab === 'auto') {
     el.innerHTML = buildAutoLayout(segList);
     bindAutoEvents(segList);
     updateAuto();
+  } else {
+    renderHistorico();
   }
 }
 
@@ -789,14 +801,229 @@ async function enviarEmail() {
   const btn = document.getElementById('modal-send');
   btn.disabled=true; btn.textContent='⏳ A enviar...';
   try {
-    const html = state.tab==='saude' ? buildPDFSaude() : buildPDFAuto();
-    const tipo = state.tab==='saude' ? 'Seguro de Saúde' : 'Seguro Automóvel';
-    await post('/cotacoes/enviar-email', { email, mensagem: msg, html_content: html,
-      seguradoras: (state.tab==='saude'?state.saude.segs:state.auto.segs).map((s,i)=>({ nome:s.nome||`Seguradora ${i+1}`, plano:s.plano, premio:s.premio_anual||s.premio||0 })) });
+    const isSaude = state.tab === 'saude';
+    const html    = isSaude ? buildPDFSaude() : buildPDFAuto();
+    const tipo    = isSaude ? 'Seguro de Saúde' : 'Seguro Automóvel';
+    const segs    = (isSaude ? state.saude.segs : state.auto.segs)
+                    .map((s,i) => ({ nome: s.nome||`Seguradora ${i+1}`, plano: s.plano, premio: s.premio_anual||s.premio||0 }));
+    const veic    = state.auto.veiculo;
+    const veicInfo = isSaude ? '' : [veic.tipo_cobertura, veic.marca, veic.modelo, veic.ano].filter(Boolean).join(' ');
+    await post('/cotacoes/enviar-email', {
+      email, mensagem: msg, html_content: html, seguradoras: segs,
+      tipo: state.tab,
+      cliente_nome: isSaude ? state.saude.cliente : state.auto.cliente,
+      veiculo_info: veicInfo,
+    });
     document.getElementById('modal-email').style.display='none';
-    showToast(`Email enviado — ${tipo}`, 'success');
+    showToast(`✅ Email enviado — ${tipo}`, 'success');
   } catch(e) { showToast('Erro ao enviar: '+e.message,'danger'); }
   finally { btn.disabled=false; btn.textContent='📤 Enviar'; }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   HISTÓRICO DE COTAÇÕES
+══════════════════════════════════════════════════════════════ */
+const ESTADO_CORES = {
+  'Enviada':       { bg:'#e8f0fe', color:'#1a56db', dot:'#1a56db' },
+  'Visualizada':   { bg:'#e0f2fe', color:'#0369a1', dot:'#0369a1' },
+  'Interessado':   { bg:'#fef9c3', color:'#854d0e', dot:'#ca8a04' },
+  'Em Negociação': { bg:'#fff7ed', color:'#9a3412', dot:'#f97316' },
+  'Convertido':    { bg:'#dcfce7', color:'#166534', dot:'#16a34a' },
+  'Perdido':       { bg:'#fee2e2', color:'#991b1b', dot:'#dc2626' },
+};
+
+function estadoBadgeH(estado) {
+  const c = ESTADO_CORES[estado] || { bg:'#f3f4f6', color:'#374151', dot:'#9ca3af' };
+  return `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:20px;font-size:11px;font-weight:600;background:${c.bg};color:${c.color}">
+    <span style="width:6px;height:6px;border-radius:50%;background:${c.dot};flex-shrink:0"></span>${estado}</span>`;
+}
+
+async function renderHistorico() {
+  const el = document.getElementById('cot-tab-content');
+  el.innerHTML = `
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-header" style="flex-wrap:wrap;gap:8px">
+      <span class="card-title">📋 Histórico de Cotações Enviadas</span>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-left:auto">
+        <input type="text" id="hist-search" class="form-control" placeholder="🔍 Cliente, email ou nº..." style="max-width:220px;font-size:13px">
+        <select id="hist-tipo" class="form-control" style="max-width:150px;font-size:13px">
+          <option value="">Todos os tipos</option>
+          <option value="saude">🏥 Saúde</option>
+          <option value="auto">🚗 Automóvel</option>
+        </select>
+        <select id="hist-estado" class="form-control" style="max-width:170px;font-size:13px">
+          <option value="">Todos os estados</option>
+          ${Object.keys(ESTADO_CORES).map(e=>`<option value="${e}">${e}</option>`).join('')}
+        </select>
+        <button class="btn btn-secondary" id="hist-refresh" style="font-size:13px">🔄 Actualizar</button>
+      </div>
+    </div>
+    <!-- Stats -->
+    <div id="hist-stats" style="display:flex;gap:12px;padding:12px 16px;background:#f8fafc;border-bottom:1px solid var(--gray-200);flex-wrap:wrap"></div>
+    <!-- Tabela -->
+    <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse" id="hist-table">
+      <thead><tr style="background:#1f2937;color:white">
+        <th style="padding:9px 12px;font-size:11px;text-align:left">Nº</th>
+        <th style="padding:9px 12px;font-size:11px;text-align:left">Data</th>
+        <th style="padding:9px 12px;font-size:11px;text-align:left">Cliente</th>
+        <th style="padding:9px 12px;font-size:11px;text-align:left">Email</th>
+        <th style="padding:9px 12px;font-size:11px;text-align:left">Tipo</th>
+        <th style="padding:9px 12px;font-size:11px;text-align:left">Seguradoras</th>
+        <th style="padding:9px 12px;font-size:11px;text-align:left">Estado</th>
+        <th style="padding:9px 12px;font-size:11px;text-align:left">Próx. Contacto</th>
+        <th style="padding:9px 12px;font-size:11px;text-align:center">Ações</th>
+      </tr></thead>
+      <tbody id="hist-body"><tr><td colspan="9" style="text-align:center;padding:32px;color:var(--gray-400)">
+        <div class="spinner" style="margin:0 auto 8px"></div>A carregar...
+      </td></tr></tbody>
+    </table></div>
+  </div>
+
+  <!-- Modal edição -->
+  <div id="hist-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:999;align-items:center;justify-content:center">
+    <div style="background:white;border-radius:12px;padding:28px;width:100%;max-width:480px;box-shadow:var(--shadow-lg)">
+      <h3 style="margin:0 0 20px;font-size:16px">✏️ Editar Cotação <span id="hm-numero" style="color:var(--primary)"></span></h3>
+      <input type="hidden" id="hm-id">
+      <div style="margin-bottom:14px">
+        <label style="font-size:12px;font-weight:600;color:var(--gray-600);display:block;margin-bottom:4px">NOME DO CLIENTE</label>
+        <input type="text" id="hm-cliente" class="form-control" placeholder="Nome do cliente">
+      </div>
+      <div style="margin-bottom:14px">
+        <label style="font-size:12px;font-weight:600;color:var(--gray-600);display:block;margin-bottom:4px">ESTADO</label>
+        <select id="hm-estado" class="form-control">
+          ${Object.keys(ESTADO_CORES).map(e=>`<option value="${e}">${e}</option>`).join('')}
+        </select>
+      </div>
+      <div style="margin-bottom:14px">
+        <label style="font-size:12px;font-weight:600;color:var(--gray-600);display:block;margin-bottom:4px">PRÓXIMO CONTACTO</label>
+        <input type="date" id="hm-prox" class="form-control">
+      </div>
+      <div style="margin-bottom:20px">
+        <label style="font-size:12px;font-weight:600;color:var(--gray-600);display:block;margin-bottom:4px">NOTAS</label>
+        <textarea id="hm-notas" class="form-control" rows="3" style="resize:none"></textarea>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button id="hm-cancel" class="btn btn-secondary">Cancelar</button>
+        <button id="hm-save" class="btn btn-primary">💾 Guardar</button>
+      </div>
+    </div>
+  </div>`;
+
+  await carregarHistorico();
+  document.getElementById('hist-search').addEventListener('input', debounce(carregarHistorico, 400));
+  document.getElementById('hist-tipo').addEventListener('change', carregarHistorico);
+  document.getElementById('hist-estado').addEventListener('change', carregarHistorico);
+  document.getElementById('hist-refresh').addEventListener('click', carregarHistorico);
+  document.getElementById('hm-cancel').addEventListener('click', () => { document.getElementById('hist-modal').style.display='none'; });
+  document.getElementById('hm-save').addEventListener('click', guardarEdicao);
+}
+
+async function carregarHistorico() {
+  const search = document.getElementById('hist-search')?.value?.trim() || '';
+  const tipo   = document.getElementById('hist-tipo')?.value || '';
+  const estado = document.getElementById('hist-estado')?.value || '';
+  const tbody  = document.getElementById('hist-body');
+  if (!tbody) return;
+  tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:24px;color:var(--gray-400)"><div class="spinner" style="margin:0 auto 8px"></div></td></tr>`;
+
+  try {
+    let url = '/cotacoes/historico?limit=100';
+    if (search) url += `&search=${encodeURIComponent(search)}`;
+    if (tipo)   url += `&tipo=${encodeURIComponent(tipo)}`;
+    if (estado) url += `&estado=${encodeURIComponent(estado)}`;
+    const rows = await get(url);
+
+    // Stats
+    const stats = await get('/cotacoes/historico/stats');
+    const statsEl = document.getElementById('hist-stats');
+    if (statsEl) {
+      const total = Object.values(stats).reduce((a,b)=>a+b,0);
+      statsEl.innerHTML = [
+        ['Total', total, '#1f2937'],
+        ...Object.entries(ESTADO_CORES).map(([k,c])=>[k, stats[k]||0, c.dot])
+      ].map(([lbl,n,cor])=>`
+        <div style="display:flex;align-items:center;gap:6px;padding:6px 12px;background:white;border-radius:8px;border:1px solid var(--gray-200)">
+          <span style="width:8px;height:8px;border-radius:50%;background:${cor};flex-shrink:0"></span>
+          <span style="font-size:11px;color:var(--gray-600)">${lbl}</span>
+          <span style="font-size:14px;font-weight:700;color:var(--gray-900)">${n}</span>
+        </div>`).join('');
+    }
+
+    if (!rows.length) {
+      tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:32px;color:var(--gray-400)">Nenhuma cotação encontrada.</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = rows.map(r => {
+      const segs = (r.seguradoras||[]).filter(Boolean).join(' · ') || '—';
+      const data = r.created_at ? r.created_at.slice(0,10).split('-').reverse().join('/') : '—';
+      const tipo = r.tipo === 'saude' ? '<span style="font-size:11px">🏥 Saúde</span>' : '<span style="font-size:11px">🚗 Auto</span>';
+      return `<tr style="border-bottom:1px solid var(--gray-100)" data-id="${r.id}">
+        <td style="padding:8px 12px;font-size:12px;font-weight:600;color:var(--primary)">${esc(r.numero)}</td>
+        <td style="padding:8px 12px;font-size:12px">${data}</td>
+        <td style="padding:8px 12px;font-size:12px;font-weight:500">${esc(r.cliente_nome||'—')}</td>
+        <td style="padding:8px 12px;font-size:12px;color:var(--gray-500)">${esc(r.email_destino)}</td>
+        <td style="padding:8px 12px">${tipo}</td>
+        <td style="padding:8px 12px;font-size:11px;color:var(--gray-600);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(segs)}">${esc(segs)}</td>
+        <td style="padding:8px 12px">${estadoBadgeH(r.estado)}</td>
+        <td style="padding:8px 12px;font-size:12px;color:var(--gray-500)">${r.proximo_contacto||'—'}</td>
+        <td style="padding:8px 12px;text-align:center">
+          <button class="btn btn-secondary hist-edit" data-row='${JSON.stringify(r).replace(/'/g,"&#39;")}' style="font-size:11px;padding:4px 8px;margin-right:4px">✏️</button>
+          <button class="btn hist-del" data-id="${r.id}" style="font-size:11px;padding:4px 8px;background:#fee2e2;color:#991b1b;border-color:#fca5a5">🗑️</button>
+        </td>
+      </tr>`;
+    }).join('');
+
+    // Bind acções
+    document.querySelectorAll('.hist-edit').forEach(btn => {
+      btn.addEventListener('click', () => abrirEdicao(JSON.parse(btn.dataset.row)));
+    });
+    document.querySelectorAll('.hist-del').forEach(btn => {
+      btn.addEventListener('click', () => eliminarCotacao(+btn.dataset.id));
+    });
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:24px;color:#dc2626">Erro: ${esc(e.message)}</td></tr>`;
+  }
+}
+
+function abrirEdicao(row) {
+  document.getElementById('hm-id').value      = row.id;
+  document.getElementById('hm-numero').textContent = row.numero;
+  document.getElementById('hm-cliente').value = row.cliente_nome || '';
+  document.getElementById('hm-estado').value  = row.estado || 'Enviada';
+  document.getElementById('hm-prox').value    = row.proximo_contacto || '';
+  document.getElementById('hm-notas').value   = row.notas || '';
+  document.getElementById('hist-modal').style.display = 'flex';
+}
+
+async function guardarEdicao() {
+  const id     = +document.getElementById('hm-id').value;
+  const btn    = document.getElementById('hm-save');
+  btn.disabled = true; btn.textContent = '⏳ A guardar...';
+  try {
+    await put(`/cotacoes/historico/${id}`, {
+      estado:           document.getElementById('hm-estado').value,
+      notas:            document.getElementById('hm-notas').value,
+      proximo_contacto: document.getElementById('hm-prox').value,
+      cliente_nome:     document.getElementById('hm-cliente').value,
+    });
+    document.getElementById('hist-modal').style.display = 'none';
+    showToast('Cotação actualizada', 'success');
+    await carregarHistorico();
+  } catch(e) { showToast('Erro: '+e.message,'danger'); }
+  finally { btn.disabled=false; btn.textContent='💾 Guardar'; }
+}
+
+async function eliminarCotacao(id) {
+  if (!confirm('Eliminar esta cotação do histórico?')) return;
+  try {
+    await del(`/cotacoes/historico/${id}`);
+    showToast('Cotação eliminada', 'success');
+    await carregarHistorico();
+  } catch(e) { showToast('Erro: '+e.message,'danger'); }
+}
+
+function debounce(fn, ms) {
+  let t; return (...args) => { clearTimeout(t); t = setTimeout(()=>fn(...args), ms); };
 }
 
 /* ══════════════════════════════════════════════════════════════

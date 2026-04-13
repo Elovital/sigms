@@ -7,6 +7,7 @@ export async function renderAcompanhamento(container, params = {}) {
 <div class="page-content">
   <div class="tabs" id="acomp-tabs">
     <div class="tab active" data-tab="interacoes">📋 Interações</div>
+    <div class="tab" data-tab="cotacoes">📊 Cotações</div>
     <div class="tab" data-tab="lembretes">🔔 Lembretes</div>
     <div class="tab" data-tab="dicas">💡 Dicas de Venda</div>
   </div>
@@ -39,6 +40,86 @@ export async function renderAcompanhamento(container, params = {}) {
         </select>
       </div>
       <div id="interacoes-list"><div class="loading"><div class="spinner"></div></div></div>
+    </div>
+  </div>
+
+  <div id="tab-cotacoes" class="hidden">
+    <div class="card">
+      <div class="card-header" style="flex-wrap:wrap;gap:8px">
+        <span class="card-title">📊 Cotações Enviadas</span>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-left:auto">
+          <input type="text" id="ac-cot-search" class="form-control" placeholder="🔍 Cliente, email ou nº..." style="max-width:200px;font-size:13px">
+          <select id="ac-cot-tipo" class="form-control" style="max-width:140px;font-size:13px">
+            <option value="">Todos os tipos</option>
+            <option value="saude">🏥 Saúde</option>
+            <option value="auto">🚗 Automóvel</option>
+          </select>
+          <select id="ac-cot-estado" class="form-control" style="max-width:160px;font-size:13px">
+            <option value="">Todos os estados</option>
+            <option value="Enviada">Enviada</option>
+            <option value="Visualizada">Visualizada</option>
+            <option value="Interessado">Interessado</option>
+            <option value="Em Negociação">Em Negociação</option>
+            <option value="Convertido">Convertido</option>
+            <option value="Perdido">Perdido</option>
+          </select>
+        </div>
+      </div>
+      <div id="ac-cot-stats" style="display:flex;gap:10px;padding:10px 16px;background:#f8fafc;border-bottom:1px solid var(--gray-200);flex-wrap:wrap"></div>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr style="background:#1f2937;color:white">
+            <th style="padding:9px 12px;font-size:11px;text-align:left">Nº</th>
+            <th style="padding:9px 12px;font-size:11px;text-align:left">Data</th>
+            <th style="padding:9px 12px;font-size:11px;text-align:left">Cliente</th>
+            <th style="padding:9px 12px;font-size:11px;text-align:left">Tipo</th>
+            <th style="padding:9px 12px;font-size:11px;text-align:left">Seguradoras</th>
+            <th style="padding:9px 12px;font-size:11px;text-align:left">Estado</th>
+            <th style="padding:9px 12px;font-size:11px;text-align:left">Próx. Contacto</th>
+            <th style="padding:9px 12px;font-size:11px;text-align:center">Ações</th>
+          </tr></thead>
+          <tbody id="ac-cot-body"><tr><td colspan="8" style="text-align:center;padding:24px;color:var(--gray-400)">
+            <div class="spinner" style="margin:0 auto"></div>
+          </td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal edição cotação (acompanhamento) -->
+  <div id="ac-cot-modal" class="modal hidden">
+    <div class="modal-backdrop" onclick="document.getElementById('ac-cot-modal').classList.add('hidden')"></div>
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3>✏️ Editar Cotação <span id="ac-hm-numero" style="color:var(--primary)"></span></h3>
+        <button class="btn btn-icon" onclick="document.getElementById('ac-cot-modal').classList.add('hidden')">✕</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="ac-hm-id">
+        <div class="form-group">
+          <label>Nome do Cliente</label>
+          <input type="text" id="ac-hm-cliente" class="form-control" placeholder="Nome do cliente">
+        </div>
+        <div class="form-group">
+          <label>Estado</label>
+          <select id="ac-hm-estado" class="form-control">
+            <option>Enviada</option><option>Visualizada</option><option>Interessado</option>
+            <option>Em Negociação</option><option>Convertido</option><option>Perdido</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Próximo Contacto</label>
+          <input type="date" id="ac-hm-prox" class="form-control">
+        </div>
+        <div class="form-group">
+          <label>Notas</label>
+          <textarea id="ac-hm-notas" class="form-control" rows="3"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="document.getElementById('ac-cot-modal').classList.add('hidden')">Cancelar</button>
+        <button class="btn btn-primary" id="ac-hm-save">💾 Guardar</button>
+      </div>
     </div>
   </div>
 
@@ -151,10 +232,11 @@ export async function renderAcompanhamento(container, params = {}) {
         tab.addEventListener('click', () => {
             document.querySelectorAll('#acomp-tabs .tab').forEach(t => t.classList.remove('active'));
             tab.classList.add('active');
-            ['interacoes', 'lembretes', 'dicas'].forEach(t =>
+            ['interacoes', 'cotacoes', 'lembretes', 'dicas'].forEach(t =>
                 document.getElementById(`tab-${t}`)?.classList.toggle('hidden', t !== tab.dataset.tab));
             if (tab.dataset.tab === 'lembretes') loadLembretes();
             if (tab.dataset.tab === 'dicas') loadDicas();
+            if (tab.dataset.tab === 'cotacoes') loadAcCotacoes();
         });
     });
 
@@ -413,4 +495,116 @@ function setupClientSearch() {
 function debounceLocal(fn, ms = 300) {
     let t;
     return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+}
+
+/* ══════════════════════════════════════════════════════════════
+   COTAÇÕES — tab no Acompanhamento
+══════════════════════════════════════════════════════════════ */
+const AC_ESTADO_CORES = {
+    'Enviada':       { bg:'#e8f0fe', color:'#1a56db' },
+    'Visualizada':   { bg:'#e0f2fe', color:'#0369a1' },
+    'Interessado':   { bg:'#fef9c3', color:'#854d0e' },
+    'Em Negociação': { bg:'#fff7ed', color:'#9a3412' },
+    'Convertido':    { bg:'#dcfce7', color:'#166534' },
+    'Perdido':       { bg:'#fee2e2', color:'#991b1b' },
+};
+
+function acEstadoBadge(estado) {
+    const c = AC_ESTADO_CORES[estado] || { bg:'#f3f4f6', color:'#374151' };
+    return `<span style="padding:3px 8px;border-radius:20px;font-size:11px;font-weight:600;background:${c.bg};color:${c.color}">${estado}</span>`;
+}
+
+async function loadAcCotacoes() {
+    const search = document.getElementById('ac-cot-search')?.value?.trim() || '';
+    const tipo   = document.getElementById('ac-cot-tipo')?.value || '';
+    const estado = document.getElementById('ac-cot-estado')?.value || '';
+    const tbody  = document.getElementById('ac-cot-body');
+    if (!tbody) return;
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:24px"><div class="spinner" style="margin:0 auto"></div></td></tr>`;
+
+    try {
+        let url = '/cotacoes/historico?limit=100';
+        if (search) url += `&search=${encodeURIComponent(search)}`;
+        if (tipo)   url += `&tipo=${encodeURIComponent(tipo)}`;
+        if (estado) url += `&estado=${encodeURIComponent(estado)}`;
+        const rows  = await get(url);
+        const stats = await get('/cotacoes/historico/stats');
+
+        // Stats strip
+        const statsEl = document.getElementById('ac-cot-stats');
+        if (statsEl) {
+            const total = Object.values(stats).reduce((a,b)=>a+b,0);
+            statsEl.innerHTML = [['Total',total,'#1f2937'],...Object.entries(AC_ESTADO_CORES).map(([k,c])=>[k,stats[k]||0,c.color])]
+                .map(([lbl,n,cor])=>`<div style="display:flex;align-items:center;gap:5px;padding:5px 10px;background:white;border-radius:6px;border:1px solid var(--gray-200)">
+                    <span style="font-size:13px;font-weight:700;color:${cor}">${n}</span>
+                    <span style="font-size:11px;color:var(--gray-500)">${lbl}</span></div>`).join('');
+        }
+
+        if (!rows.length) {
+            tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:32px;color:var(--gray-400)">Nenhuma cotação encontrada.</td></tr>`;
+            return;
+        }
+        tbody.innerHTML = rows.map(r => {
+            const segs = (r.seguradoras||[]).filter(Boolean).join(' · ') || '—';
+            const data = r.created_at ? r.created_at.slice(0,10).split('-').reverse().join('/') : '—';
+            const tipoLabel = r.tipo === 'saude' ? '🏥 Saúde' : '🚗 Auto';
+            return `<tr style="border-bottom:1px solid var(--gray-100)">
+                <td style="padding:8px 12px;font-size:12px;font-weight:600;color:var(--primary)">${r.numero}</td>
+                <td style="padding:8px 12px;font-size:12px">${data}</td>
+                <td style="padding:8px 12px;font-size:12px;font-weight:500">${r.cliente_nome||'—'}</td>
+                <td style="padding:8px 12px;font-size:11px">${tipoLabel}</td>
+                <td style="padding:8px 12px;font-size:11px;color:var(--gray-600);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${segs}">${segs}</td>
+                <td style="padding:8px 12px">${acEstadoBadge(r.estado)}</td>
+                <td style="padding:8px 12px;font-size:12px;color:var(--gray-500)">${r.proximo_contacto||'—'}</td>
+                <td style="padding:8px 12px;text-align:center">
+                    <button class="btn btn-secondary ac-cot-edit" style="font-size:11px;padding:4px 8px"
+                        data-id="${r.id}" data-estado="${r.estado}"
+                        data-cliente="${(r.cliente_nome||'').replace(/"/g,'&quot;')}"
+                        data-numero="${r.numero}"
+                        data-prox="${r.proximo_contacto||''}"
+                        data-notas="${(r.notas||'').replace(/"/g,'&quot;')}">✏️ Editar</button>
+                </td>
+            </tr>`;
+        }).join('');
+
+        // Bind edição
+        document.querySelectorAll('.ac-cot-edit').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.getElementById('ac-hm-id').value      = btn.dataset.id;
+                document.getElementById('ac-hm-numero').textContent = btn.dataset.numero;
+                document.getElementById('ac-hm-cliente').value = btn.dataset.cliente;
+                document.getElementById('ac-hm-estado').value  = btn.dataset.estado;
+                document.getElementById('ac-hm-prox').value    = btn.dataset.prox;
+                document.getElementById('ac-hm-notas').value   = btn.dataset.notas;
+                document.getElementById('ac-cot-modal').classList.remove('hidden');
+            });
+        });
+
+        // Guardar edição
+        document.getElementById('ac-hm-save').onclick = async () => {
+            const id  = +document.getElementById('ac-hm-id').value;
+            const btn = document.getElementById('ac-hm-save');
+            btn.disabled = true; btn.textContent = '⏳';
+            try {
+                await put(`/cotacoes/historico/${id}`, {
+                    estado:           document.getElementById('ac-hm-estado').value,
+                    notas:            document.getElementById('ac-hm-notas').value,
+                    proximo_contacto: document.getElementById('ac-hm-prox').value,
+                    cliente_nome:     document.getElementById('ac-hm-cliente').value,
+                });
+                document.getElementById('ac-cot-modal').classList.add('hidden');
+                toast('Cotação actualizada', 'success');
+                await loadAcCotacoes();
+            } catch(e) { toast('Erro: '+e.message,'error'); }
+            finally { btn.disabled=false; btn.textContent='💾 Guardar'; }
+        };
+
+    } catch(e) {
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:24px;color:#dc2626">Erro: ${e.message}</td></tr>`;
+    }
+
+    // Filtros em tempo real
+    document.getElementById('ac-cot-search')?.addEventListener('input', debounceLocal(loadAcCotacoes, 400));
+    document.getElementById('ac-cot-tipo')?.addEventListener('change', loadAcCotacoes);
+    document.getElementById('ac-cot-estado')?.addEventListener('change', loadAcCotacoes);
 }
