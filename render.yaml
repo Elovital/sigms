@@ -7,12 +7,15 @@ services:
     healthCheckPath: /health
     envVars:
       - key: DATABASE_URL
-        value: sqlite+aiosqlite:////data/sigms.db
+        fromDatabase:
+          name: sigms-db
+          property: connectionString
       - key: JWT_SECRET
         generateValue: true
       - key: ENCRYPTION_KEY
         generateValue: true
-    disk:
-      name: sigms-data
-      mountPath: /data
-      sizeGB: 1
+
+databases:
+  - name: sigms-db
+    plan: free
+    region: frankfurt

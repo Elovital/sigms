@@ -2,7 +2,7 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    DATABASE_URL: str = "sqlite+aiosqlite:///./data/sigms.db"
+    DATABASE_URL: str = "sqlite+aiosqlite:///./data/sigms.db"  # override via env var em produção
     JWT_SECRET: str = "changeme"
     ENCRYPTION_KEY: str = "changeme"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
