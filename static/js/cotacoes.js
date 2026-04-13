@@ -698,7 +698,7 @@ function pdfHeader(cliente = '') {
   </div>
   <div class="pdf-header-right">
     <div class="pdf-contacts">
-      <div>✉ contato@elovital.com</div>
+      <div>✉ cotacao@elovital-ao.com</div>
       <div>☎ +244 929 494 085</div>
     </div>
     ${clienteBlock}
@@ -707,7 +707,7 @@ function pdfHeader(cliente = '') {
 }
 
 function pdfFooter() {
-  return `<div class="pdf-footer">ELOVITAL — Mediação de Seguros · contato@elovital.com · +244 929 494 085 · Documento gerado em ${new Date().toLocaleDateString('pt-AO')} às ${new Date().toLocaleTimeString('pt-AO',{hour:'2-digit',minute:'2-digit'})}</div>`;
+  return `<div class="pdf-footer">ELOVITAL — Mediação de Seguros · cotacao@elovital-ao.com · +244 929 494 085 · Documento gerado em ${new Date().toLocaleDateString('pt-AO')} às ${new Date().toLocaleTimeString('pt-AO',{hour:'2-digit',minute:'2-digit'})}</div>`;
 }
 
 function buildPDFSaude() {
