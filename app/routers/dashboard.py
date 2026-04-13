@@ -1,5 +1,5 @@
 """Dashboard KPI and chart data endpoints."""
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
@@ -15,55 +15,59 @@ from app.models.user import User
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 
+def _dt(d: date) -> datetime:
+    """Converter date em datetime UTC aware para comparações com DateTime(timezone=True)."""
+    return datetime(d.year, d.month, d.day, tzinfo=timezone.utc)
+
+
 @router.get("/kpis")
 async def get_kpis(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     today = date.today()
-    first_of_month = today.replace(day=1).isoformat()
-    today_str = today.isoformat()
-    threshold_30 = (today + timedelta(days=30)).isoformat()
+    first_of_month_dt = _dt(today.replace(day=1))
+    threshold_30_str  = (today + timedelta(days=30)).isoformat()
+    today_str         = today.isoformat()
 
-    # Produção mensal (sum of premios this month)
+    # Produção mensal
     prod_result = await db.execute(
-        select(func.sum(Premio.premio_base)).where(Premio.created_at >= first_of_month)
+        select(func.sum(Premio.premio_base)).where(Premio.created_at >= first_of_month_dt)
     )
     producao_mensal = round(prod_result.scalar() or 0.0, 2)
 
-    # Total active policies
+    # Apólices ativas
     total_ativas = (await db.execute(
         select(func.count()).where(Apolice.estado == "Ativa", Apolice.deleted_at.is_(None))
     )).scalar() or 0
 
-    # Renewals in 30 days
+    # Renovações em 30 dias
     renovacoes = (await db.execute(
         select(func.count()).where(
             Apolice.data_renovacao >= today_str,
-            Apolice.data_renovacao <= threshold_30,
+            Apolice.data_renovacao <= threshold_30_str,
             Apolice.deleted_at.is_(None),
             Apolice.estado == "Ativa",
         )
     )).scalar() or 0
 
-    # Active claims
+    # Sinistros ativos
     sinistros_ativos = (await db.execute(
         select(func.count()).where(Sinistro.estado.in_(["Aberto", "Em Analise", "Em Regularizacao"]))
     )).scalar() or 0
 
-    # Total clients
+    # Total clientes
     total_clients = (await db.execute(
         select(func.count()).where(Client.deleted_at.is_(None))
     )).scalar() or 0
 
-    # Pending payments
+    # Pagamentos pendentes / atrasados
     pagamentos_pendentes = (await db.execute(
         select(func.count()).where(Pagamento.estado.in_(["Pendente", "Atrasado"]))
     )).scalar() or 0
 
-    # Overdue payments
     pagamentos_atrasados = (await db.execute(
         select(func.count()).where(Pagamento.estado == "Atrasado")
     )).scalar() or 0
 
-    # Taxa de retenção: políticas ativas / total (simplificado)
+    # Taxa de retenção
     total_apolices = (await db.execute(
         select(func.count()).where(Apolice.deleted_at.is_(None))
     )).scalar() or 1
@@ -88,7 +92,7 @@ async def chart_ramos(db: AsyncSession = Depends(get_db), current_user: User = D
         .join(Apolice, Apolice.ramo_id == Ramo.id)
         .outerjoin(Premio, Premio.apolice_id == Apolice.id)
         .where(Apolice.deleted_at.is_(None), Apolice.estado == "Ativa")
-        .group_by(Ramo.id)
+        .group_by(Ramo.id, Ramo.nome, Ramo.codigo)
         .order_by(func.count(Apolice.id).desc())
     )
     rows = result.all()
@@ -97,39 +101,50 @@ async def chart_ramos(db: AsyncSession = Depends(get_db), current_user: User = D
 
 @router.get("/charts/comissoes")
 async def chart_comissoes(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
-    """Last 12 months cash flow."""
-    from datetime import datetime
+    """Últimos 12 meses de cash flow — compatível com PostgreSQL."""
+    # Gerar lista dos últimos 12 meses (YYYY-MM)
     months = []
     for i in range(11, -1, -1):
         d = date.today().replace(day=1) - timedelta(days=i * 30)
         months.append(d.strftime("%Y-%m"))
 
-    result_previstas = await db.execute(
-        select(
-            func.strftime("%Y-%m", Comissao.data_referencia).label("month"),
-            func.sum(Comissao.valor).label("total")
-        ).where(Comissao.estado == "Prevista").group_by("month")
+    # Ir buscar todas as comissões com data_referencia (campo String YYYY-MM-DD)
+    # e agregar em Python — compatível com qualquer BD
+    result_prev = await db.execute(
+        select(Comissao.data_referencia, func.sum(Comissao.valor).label("total"))
+        .where(Comissao.estado == "Prevista")
+        .group_by(Comissao.data_referencia)
     )
-    result_recebidas = await db.execute(
-        select(
-            func.strftime("%Y-%m", Comissao.data_referencia).label("month"),
-            func.sum(Comissao.valor).label("total")
-        ).where(Comissao.estado == "Recebida").group_by("month")
+    result_rec = await db.execute(
+        select(Comissao.data_referencia, func.sum(Comissao.valor).label("total"))
+        .where(Comissao.estado == "Recebida")
+        .group_by(Comissao.data_referencia)
     )
 
-    previstas_map = {r.month: round(r.total, 2) for r in result_previstas.all()}
-    recebidas_map = {r.month: round(r.total, 2) for r in result_recebidas.all()}
+    def to_month(val) -> str:
+        if val is None:
+            return ""
+        s = str(val)
+        return s[:7]  # "YYYY-MM"
+
+    previstas_map: dict[str, float] = {}
+    for r in result_prev.all():
+        m = to_month(r.data_referencia)
+        previstas_map[m] = round((previstas_map.get(m, 0) + (r.total or 0)), 2)
+
+    recebidas_map: dict[str, float] = {}
+    for r in result_rec.all():
+        m = to_month(r.data_referencia)
+        recebidas_map[m] = round((recebidas_map.get(m, 0) + (r.total or 0)), 2)
 
     return [{"month": m, "previstas": previstas_map.get(m, 0.0), "recebidas": recebidas_map.get(m, 0.0)} for m in months]
 
 
 @router.get("/quick-actions")
 async def quick_actions(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
-    """Return clients with pending payments and upcoming renewals for quick action."""
     today = date.today().isoformat()
     threshold_30 = (date.today() + timedelta(days=30)).isoformat()
 
-    # Upcoming renewals
     renew_result = await db.execute(
         select(Apolice, Client).join(Client, Client.id == Apolice.client_id)
         .where(
