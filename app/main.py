@@ -161,4 +161,22 @@ async def root():
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "app": "SIGMS ELOVITAL", "version": "1.0.0"}
+    from sqlalchemy import text
+    from app.database import engine
+    db_status = "unknown"
+    db_error = None
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(text("SELECT 1"))
+        db_status = "ok"
+    except Exception as e:
+        db_status = "error"
+        db_error = str(e)[:300]
+    return {
+        "status": "ok",
+        "app": "SIGMS ELOVITAL",
+        "version": "1.0.0",
+        "db": db_status,
+        "db_error": db_error,
+        "db_url_driver": settings.DATABASE_URL.split("://")[0],
+    }
