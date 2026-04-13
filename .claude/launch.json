@@ -5,7 +5,7 @@
       "name": "SIGMS Backend (FastAPI)",
       "runtimeExecutable": "python3",
       "runtimeArgs": ["start_preview.py"],
-      "port": 8000
+      "port": 8001
     },
     {
       "name": "Monitor MO",
