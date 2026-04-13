@@ -7,13 +7,13 @@ _url = settings.DATABASE_URL
 _connect_args = {}
 
 if _url.startswith("postgresql"):
-    # asyncpg: desactivar SSL em conexões internas Render (mesmo VPC)
-    _connect_args = {"ssl": False}
-    _engine_kwargs = {
-        "pool_size": 5,
-        "max_overflow": 10,
-        "pool_pre_ping": True,
-    }
+    # Render PostgreSQL requer SSL mesmo em conexões internas
+    import ssl as _ssl
+    _ssl_ctx = _ssl.create_default_context()
+    _ssl_ctx.check_hostname = False
+    _ssl_ctx.verify_mode = _ssl.CERT_NONE
+    _connect_args = {"ssl": _ssl_ctx}
+    _engine_kwargs = {"pool_pre_ping": True}
 else:
     _engine_kwargs = {}
 
