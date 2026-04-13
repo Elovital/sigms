@@ -16,7 +16,10 @@ def _send(to_email: str, msg: MIMEMultipart) -> bool:
     try:
         if port == 465:
             # SSL directo — Hostinger e outros provedores com porta 465
+            # CERT_NONE necessário para servidores com certificado auto-assinado (ex: Hostinger)
             ctx = ssl.create_default_context()
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
             with smtplib.SMTP_SSL(settings.SMTP_HOST, port, context=ctx, timeout=15) as server:
                 server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
                 server.sendmail(settings.SMTP_FROM, [to_email], msg.as_string())
