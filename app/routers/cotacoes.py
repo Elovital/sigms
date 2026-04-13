@@ -1,5 +1,7 @@
 """Mapa Comparativo de Cotações — endpoint de envio por email."""
+import asyncio
 import logging
+from functools import partial
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -53,11 +55,22 @@ async def enviar_email_comparativo(
   </p>
 </body></html>"""
 
-    ok = send_generic_email(
-        to_email=body.email,
-        subject="Mapa Comparativo de Cotações — Seguro de Saúde",
-        body_html=html,
-    )
+    # Executar o envio SMTP numa thread separada para não bloquear o event loop
+    loop = asyncio.get_event_loop()
+    try:
+        ok = await loop.run_in_executor(
+            None,
+            partial(
+                send_generic_email,
+                to_email=body.email,
+                subject="Mapa Comparativo de Cotações — ELOVITAL",
+                body_html=html,
+            ),
+        )
+    except Exception as exc:
+        logger.error(f"[cotacoes] Excepção ao enviar email: {exc}")
+        raise HTTPException(status_code=500, detail=f"Erro SMTP: {exc}")
+
     if not ok:
         raise HTTPException(status_code=500, detail="Falha ao enviar email. Verifique a configuração SMTP.")
     return {"ok": True}

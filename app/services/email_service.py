@@ -32,8 +32,8 @@ def _send(to_email: str, msg: MIMEMultipart) -> bool:
                 server.sendmail(settings.SMTP_FROM, [to_email], msg.as_string())
         return True
     except Exception as e:
-        logger.error(f"[email_service] Falha ao enviar email para {to_email}: {e}")
-        return False
+        logger.error(f"[email_service] Falha ao enviar email para {to_email}: {type(e).__name__}: {e}")
+        raise
 
 
 def send_password_reset_email(to_email: str, username: str, reset_token: str) -> bool:
