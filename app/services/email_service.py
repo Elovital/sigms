@@ -1,5 +1,6 @@
 """Email service for sending password reset and notifications."""
 import smtplib
+import ssl
 import logging
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -7,6 +8,29 @@ from email.mime.text import MIMEText
 from app.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+def _send(to_email: str, msg: MIMEMultipart) -> bool:
+    """Enviar email usando SSL (porta 465) ou STARTTLS (porta 587/outras)."""
+    port = int(settings.SMTP_PORT)
+    try:
+        if port == 465:
+            # SSL directo — Hostinger e outros provedores com porta 465
+            ctx = ssl.create_default_context()
+            with smtplib.SMTP_SSL(settings.SMTP_HOST, port, context=ctx, timeout=15) as server:
+                server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+                server.sendmail(settings.SMTP_FROM, [to_email], msg.as_string())
+        else:
+            # STARTTLS — Gmail, Outlook (porta 587)
+            with smtplib.SMTP(settings.SMTP_HOST, port, timeout=15) as server:
+                server.ehlo()
+                server.starttls()
+                server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+                server.sendmail(settings.SMTP_FROM, [to_email], msg.as_string())
+        return True
+    except Exception as e:
+        logger.error(f"[email_service] Falha ao enviar email para {to_email}: {e}")
+        return False
 
 
 def send_password_reset_email(to_email: str, username: str, reset_token: str) -> bool:
@@ -46,22 +70,12 @@ def send_password_reset_email(to_email: str, username: str, reset_token: str) ->
         logger.warning(f"[email_service] SMTP não configurado. Token de reset para {to_email}: {reset_token}")
         return False
 
-    try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = subject
-        msg["From"] = f"{settings.SMTP_FROM_NAME} <{settings.SMTP_FROM}>"
-        msg["To"] = to_email
-        msg.attach(MIMEText(body_html, "html", "utf-8"))
-
-        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10) as server:
-            server.ehlo()
-            server.starttls()
-            server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
-            server.sendmail(settings.SMTP_FROM, [to_email], msg.as_string())
-        return True
-    except Exception as e:
-        logger.error(f"[email_service] Falha ao enviar email para {to_email}: {e}")
-        return False
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    msg["From"] = f"{settings.SMTP_FROM_NAME} <{settings.SMTP_FROM}>"
+    msg["To"] = to_email
+    msg.attach(MIMEText(body_html, "html", "utf-8"))
+    return _send(to_email, msg)
 
 
 def send_generic_email(to_email: str, subject: str, body_html: str) -> bool:
@@ -69,18 +83,9 @@ def send_generic_email(to_email: str, subject: str, body_html: str) -> bool:
     if not settings.SMTP_USER or not settings.SMTP_PASSWORD:
         logger.warning(f"[email_service] SMTP não configurado. Email para {to_email} não enviado.")
         return False
-    try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = subject
-        msg["From"] = f"{settings.SMTP_FROM_NAME} <{settings.SMTP_FROM}>"
-        msg["To"] = to_email
-        msg.attach(MIMEText(body_html, "html", "utf-8"))
-        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10) as server:
-            server.ehlo()
-            server.starttls()
-            server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
-            server.sendmail(settings.SMTP_FROM, [to_email], msg.as_string())
-        return True
-    except Exception as e:
-        logger.error(f"[email_service] Falha ao enviar email para {to_email}: {e}")
-        return False
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    msg["From"] = f"{settings.SMTP_FROM_NAME} <{settings.SMTP_FROM}>"
+    msg["To"] = to_email
+    msg.attach(MIMEText(body_html, "html", "utf-8"))
+    return _send(to_email, msg)
