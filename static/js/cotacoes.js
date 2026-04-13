@@ -40,8 +40,8 @@ const TIPOS_COBERTURA_AUTO = ['RC Obrigatória', 'RC + Danos Próprios', 'Todos 
 /* ═══════════════════════════ ESTADO ═══════════════════════════ */
 let state = {
   tab: 'saude',   // 'saude' | 'auto'
-  saude: { segs: [], radarChart: null },
-  auto:  { segs: [], radarChart: null, veiculo: {} },
+  saude: { segs: [], radarChart: null, cliente: '' },
+  auto:  { segs: [], radarChart: null, veiculo: {}, cliente: '' },
 };
 
 /* ═══════════════════════════ ENTRY POINT ═══════════════════════════ */
@@ -49,11 +49,13 @@ export async function renderCotacoes(container) {
   let segList = [];
   try { segList = (await get('/apolices/lookup/seguradoras')).map(s => s.nome); } catch {}
 
-  state.saude.segs = [0,1,2].map(() => newSegSaude());
-  state.auto.segs  = [0,1,2].map(() => newSegAuto());
-  state.auto.veiculo = { tipo_cobertura: '', marca: '', modelo: '', ano: '', valor: '' };
+  state.saude.segs    = [0,1,2].map(() => newSegSaude());
+  state.auto.segs     = [0,1,2].map(() => newSegAuto());
+  state.auto.veiculo  = { tipo_cobertura: '', marca: '', modelo: '', ano: '', valor: '' };
   state.saude.radarChart = null;
   state.auto.radarChart  = null;
+  state.saude.cliente = '';
+  state.auto.cliente  = '';
 
   container.innerHTML = buildRoot();
   bindTabEvents(segList);
@@ -159,6 +161,17 @@ function renderTab(segList) {
 ══════════════════════════════════════════════════════════════ */
 function buildSaudeLayout(segList) {
   return `
+  <!-- Cliente -->
+  <div class="card" style="margin-bottom:16px;border-top:3px solid #1a56db">
+    <div class="card-body" style="padding:12px 16px;display:flex;align-items:center;gap:16px">
+      <span style="font-size:20px">👤</span>
+      <div style="flex:1">
+        <label style="font-size:11px;font-weight:700;color:var(--gray-600);text-transform:uppercase;display:block;margin-bottom:3px">Nome do Cliente</label>
+        <input type="text" class="form-control" id="s-cliente" placeholder="Nome completo do cliente ou empresa" value="${esc(state.saude.cliente)}" style="font-size:13px;max-width:480px">
+      </div>
+    </div>
+  </div>
+
   <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:24px" id="seg-cards-saude">
     ${[0,1,2].map(i => buildSegCardSaude(i, segList)).join('')}
   </div>
@@ -210,6 +223,7 @@ function buildSegCardSaude(i, segList) {
 }
 
 function bindSaudeEvents(segList) {
+  document.getElementById('s-cliente')?.addEventListener('input', e => { state.saude.cliente = e.target.value; });
   [0,1,2].forEach(i => {
     ['nome','plano','premio'].forEach(f => document.getElementById(`s-${f}-${i}`)?.addEventListener('input', () => { readSegSaude(i); updateSaude(); }));
     COBERTURAS_SAUDE.forEach(c => {
@@ -284,6 +298,17 @@ function calcScoresSaude() {
 ══════════════════════════════════════════════════════════════ */
 function buildAutoLayout(segList) {
   return `
+  <!-- Cliente -->
+  <div class="card" style="margin-bottom:16px;border-top:3px solid #1a56db">
+    <div class="card-body" style="padding:12px 16px;display:flex;align-items:center;gap:16px">
+      <span style="font-size:20px">👤</span>
+      <div style="flex:1">
+        <label style="font-size:11px;font-weight:700;color:var(--gray-600);text-transform:uppercase;display:block;margin-bottom:3px">Nome do Cliente</label>
+        <input type="text" class="form-control" id="a-cliente" placeholder="Nome completo do cliente ou empresa" value="${esc(state.auto.cliente)}" style="font-size:13px;max-width:480px">
+      </div>
+    </div>
+  </div>
+
   <!-- Info do Veículo -->
   <div class="card" style="margin-bottom:16px;border-top:3px solid #f59e0b">
     <div class="card-header" style="background:#fef3c7;padding:12px 16px">
@@ -372,6 +397,7 @@ function buildSegCardAuto(i, segList) {
 }
 
 function bindAutoEvents(segList) {
+  document.getElementById('a-cliente')?.addEventListener('input', e => { state.auto.cliente = e.target.value; });
   ['a-tipo-cob','a-marca','a-modelo','a-ano','a-valor'].forEach(id => {
     document.getElementById(id)?.addEventListener('input', () => { readVeiculo(); updateAuto(); });
   });
@@ -621,45 +647,61 @@ function pdfStyle() {
 body{font-family:Arial,sans-serif;font-size:11px;color:#111;margin:0;padding:0}
 /* cabeçalho */
 .pdf-header{display:flex;justify-content:space-between;align-items:center;
-  padding:10px 16px 10px 16px;background:#0f172a;color:#fff;margin-bottom:12px}
-.pdf-header-left{display:flex;align-items:center;gap:12px}
-.pdf-logo{width:44px;height:44px;border-radius:8px;background:#1a56db;
-  display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0}
+  padding:12px 18px;background:linear-gradient(135deg,#1e429f 0%,#1a56db 100%);color:#fff;margin-bottom:12px;
+  border-radius:0}
+.pdf-header-left{display:flex;align-items:center;gap:14px}
+.pdf-logo{width:50px;height:50px;border-radius:8px;overflow:hidden;background:#fff;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;padding:2px}
+.pdf-logo img{width:100%;height:100%;object-fit:contain}
 .pdf-brand{display:flex;flex-direction:column}
-.pdf-brand-name{font-size:15px;font-weight:800;letter-spacing:.5px;color:#fff}
-.pdf-brand-sub{font-size:9px;color:#94a3b8;margin-top:1px}
-.pdf-contacts{text-align:right;font-size:9px;color:#94a3b8;line-height:1.7}
-.pdf-contacts a{color:#60a5fa;text-decoration:none}
+.pdf-brand-name{font-size:18px;font-weight:900;letter-spacing:.5px;color:#fff;line-height:1}
+.pdf-brand-sub{font-size:9px;color:#bfdbfe;margin-top:3px;font-weight:400}
+.pdf-header-right{text-align:right}
+.pdf-contacts{font-size:9px;color:#bfdbfe;line-height:1.9}
+.pdf-cliente-block{margin-top:5px;background:rgba(255,255,255,.15);border-radius:5px;
+  padding:4px 10px;font-size:10px;color:#fff;font-weight:600}
+.pdf-cliente-label{font-size:8px;font-weight:400;color:#bfdbfe;text-transform:uppercase;letter-spacing:.5px;display:block}
 /* título do documento */
 .pdf-title-bar{padding:0 4px 8px 4px;border-bottom:3px solid #1a56db;margin-bottom:10px;
   display:flex;justify-content:space-between;align-items:flex-end}
-.pdf-title-bar h2{font-size:14px;color:#1a56db;margin:0;font-weight:800}
+.pdf-title-bar h2{font-size:14px;color:#1e429f;margin:0;font-weight:800}
 .pdf-title-bar .pdf-date{font-size:9px;color:#6b7280}
-h3{font-size:11px;color:#374151;margin:12px 0 5px;border-bottom:2px solid #1a56db;padding-bottom:2px;font-weight:700}
+h3{font-size:11px;color:#1e429f;margin:12px 0 5px;border-bottom:2px solid #1a56db;padding-bottom:2px;font-weight:700}
 table{width:100%;border-collapse:collapse;margin-bottom:12px}
-th{background:#1f2937;color:white;padding:6px 8px;font-size:10px;text-align:left}
+th{background:linear-gradient(135deg,#1e429f,#1a56db);color:white;padding:6px 8px;font-size:10px;text-align:left}
 td{border-bottom:1px solid #e5e7eb;padding:4px 8px;font-size:10px}
-tr:nth-child(even)td{background:#f9fafb}
-.rec{background:#eff6ff;border:1px solid #1a56db40;border-radius:6px;padding:10px 14px;margin-top:12px;font-size:10px}
+tr:nth-child(even)td{background:#f0f5ff}
+.rec{background:#e8f0fe;border:1px solid #1a56db60;border-radius:6px;padding:10px 14px;margin-top:12px;font-size:10px;
+  border-left:4px solid #1a56db}
 /* rodapé */
 .pdf-footer{margin-top:14px;padding-top:6px;border-top:1px solid #e5e7eb;
   text-align:center;font-size:8px;color:#9ca3af}
-@media print{body{padding:0}.pdf-header{-webkit-print-color-adjust:exact;print-color-adjust:exact}
-th{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style>`;
+@media print{body{padding:0}
+  .pdf-header{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  th{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  tr:nth-child(even)td{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .rec{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style>`;
 }
 
-function pdfHeader() {
+function pdfHeader(cliente = '') {
+  const logoUrl = `${window.location.origin}/static/img/logo.png`;
+  const clienteBlock = cliente
+    ? `<div class="pdf-cliente-block"><span class="pdf-cliente-label">Cliente</span>${esc(cliente)}</div>`
+    : '';
   return `<div class="pdf-header">
   <div class="pdf-header-left">
-    <div class="pdf-logo">🛡️</div>
+    <div class="pdf-logo"><img src="${logoUrl}" alt="ELOVITAL" onerror="this.style.display='none';this.parentNode.innerHTML='🛡️'"></div>
     <div class="pdf-brand">
       <span class="pdf-brand-name">ELOVITAL</span>
       <span class="pdf-brand-sub">Mediação de Seguros · SIGMS</span>
     </div>
   </div>
-  <div class="pdf-contacts">
-    <div>📧 contato@elovital.com</div>
-    <div>📞 +244 929 494 085</div>
+  <div class="pdf-header-right">
+    <div class="pdf-contacts">
+      <div>✉ contato@elovital.com</div>
+      <div>☎ +244 929 494 085</div>
+    </div>
+    ${clienteBlock}
   </div>
 </div>`;
 }
@@ -680,8 +722,9 @@ function buildPDFSaude() {
     }).join('');
     return `<tr><td>${c.icon} ${c.label}</td>${cells}</tr>`;
   }).join('');
+  const clienteSaude = state.saude.cliente || '';
   return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Comparativo Saúde — ELOVITAL</title>${pdfStyle()}</head><body>
-  ${pdfHeader()}
+  ${pdfHeader(clienteSaude)}
   <div class="pdf-title-bar">
     <h2>📊 Mapa Comparativo — Seguro de Saúde</h2>
     <span class="pdf-date">Emitido em ${new Date().toLocaleDateString('pt-AO')}</span>
@@ -715,8 +758,9 @@ function buildPDFAuto() {
     return `<tr><td style="font-weight:700">${l}</td>${cells}</tr>`;
   }).join('');
   const veicInfo = [veic.tipo_cobertura, veic.marca, veic.modelo, veic.ano].filter(Boolean).join(' · ');
+  const clienteAuto = state.auto.cliente || '';
   return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Comparativo Automóvel — ELOVITAL</title>${pdfStyle()}</head><body>
-  ${pdfHeader()}
+  ${pdfHeader(clienteAuto)}
   <div class="pdf-title-bar">
     <div>
       <h2>🚗 Mapa Comparativo — Seguro Automóvel</h2>
