@@ -2,7 +2,7 @@
 import logging
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 
 from app.dependencies import get_current_user
 from app.models.user import User
@@ -19,7 +19,7 @@ class SeguradoraInfo(BaseModel):
 
 
 class EnviarEmailIn(BaseModel):
-    email: EmailStr
+    email: str
     mensagem: Optional[str] = ""
     html_content: str
     seguradoras: List[SeguradoraInfo]
