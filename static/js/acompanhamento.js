@@ -53,6 +53,8 @@ export async function renderAcompanhamento(container, params = {}) {
             <option value="">Todos os tipos</option>
             <option value="saude">🏥 Saúde</option>
             <option value="auto">🚗 Automóvel</option>
+            <option value="multi">🏠 Multirisco</option>
+            <option value="at">👷 Ac. Trabalho</option>
           </select>
           <select id="ac-cot-estado" class="form-control" style="max-width:160px;font-size:13px">
             <option value="">Todos os estados</option>
@@ -547,7 +549,7 @@ async function loadAcCotacoes() {
         tbody.innerHTML = rows.map(r => {
             const segs = (r.seguradoras||[]).filter(Boolean).join(' · ') || '—';
             const data = r.created_at ? r.created_at.slice(0,10).split('-').reverse().join('/') : '—';
-            const tipoLabel = r.tipo === 'saude' ? '🏥 Saúde' : '🚗 Auto';
+            const tipoLabel = r.tipo === 'saude' ? '🏥 Saúde' : r.tipo === 'auto' ? '🚗 Auto' : r.tipo === 'multi' ? '🏠 Multirisco' : '👷 Ac. Trabalho';
             return `<tr style="border-bottom:1px solid var(--gray-100)">
                 <td style="padding:8px 12px;font-size:12px;font-weight:600;color:var(--primary)">${r.numero}</td>
                 <td style="padding:8px 12px;font-size:12px">${data}</td>
