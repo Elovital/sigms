@@ -11,6 +11,7 @@ import { renderAcompanhamento } from './acompanhamento.js';
 import { renderProspeccao } from './prospeccao.js';
 import { renderPerfil } from './perfil.js';
 import { renderIA } from './ia.js';
+import { renderCotacoes } from './cotacoes.js';
 
 const SIDEBAR_ITEMS = [
     { hash: '#/', icon: '🏠', label: 'Dashboard' },
@@ -26,6 +27,7 @@ const SIDEBAR_ITEMS = [
     { hash: '#/sinistros', icon: '⚠️', label: 'Sinistros' },
     { section: 'Inteligência' },
     { hash: '#/ia', icon: '🧠', label: 'IA Insights' },
+    { hash: '#/cotacoes', icon: '📊', label: 'Comparativo Cotações' },
     { section: 'Sistema' },
     { hash: '#/admin', icon: '⚙️', label: 'Administração', adminOnly: true },
 ];
@@ -106,6 +108,7 @@ const ROUTES = {
     '/acompanhamento': { title: 'Acompanhamento de Vendas', render: (c) => renderAcompanhamento(c) },
     '/admin': { title: 'Administração', render: (c) => renderAdmin(c) },
     '/ia': { title: 'IA Insights', render: (c) => renderIA(c) },
+    '/cotacoes': { title: 'Comparativo de Cotações', render: (c) => renderCotacoes(c) },
     '/perfil': { title: 'Meu Perfil', render: (c) => renderPerfil(c, currentUser) },
 };
 

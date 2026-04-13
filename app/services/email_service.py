@@ -62,3 +62,25 @@ def send_password_reset_email(to_email: str, username: str, reset_token: str) ->
     except Exception as e:
         logger.error(f"[email_service] Falha ao enviar email para {to_email}: {e}")
         return False
+
+
+def send_generic_email(to_email: str, subject: str, body_html: str) -> bool:
+    """Send a generic HTML email. Returns True on success."""
+    if not settings.SMTP_USER or not settings.SMTP_PASSWORD:
+        logger.warning(f"[email_service] SMTP não configurado. Email para {to_email} não enviado.")
+        return False
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = f"{settings.SMTP_FROM_NAME} <{settings.SMTP_FROM}>"
+        msg["To"] = to_email
+        msg.attach(MIMEText(body_html, "html", "utf-8"))
+        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10) as server:
+            server.ehlo()
+            server.starttls()
+            server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+            server.sendmail(settings.SMTP_FROM, [to_email], msg.as_string())
+        return True
+    except Exception as e:
+        logger.error(f"[email_service] Falha ao enviar email para {to_email}: {e}")
+        return False
