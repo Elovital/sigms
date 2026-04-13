@@ -17,7 +17,7 @@ class Premio(Base):
     moeda: Mapped[str] = mapped_column(String(3), nullable=False, default="AKZ")
     periodo_inicio: Mapped[str] = mapped_column(String(10), nullable=False)
     periodo_fim: Mapped[str] = mapped_column(String(10), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
     apolice: Mapped["Apolice"] = relationship("Apolice", back_populates="premios")
     pagamentos: Mapped[list["Pagamento"]] = relationship("Pagamento", back_populates="premio")
@@ -35,7 +35,7 @@ class Pagamento(Base):
     metodo: Mapped[str | None] = mapped_column(String(30), nullable=True)
     referencia: Mapped[str | None] = mapped_column(String(100), nullable=True)
     alerta_d1_enviado: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
     premio: Mapped["Premio"] = relationship("Premio", back_populates="pagamentos")
     comissoes: Mapped[list["Comissao"]] = relationship("Comissao", back_populates="pagamento")
@@ -52,7 +52,7 @@ class Comissao(Base):
     valor: Mapped[float] = mapped_column(Float, nullable=False)
     data_referencia: Mapped[str] = mapped_column(String(10), nullable=False)
     estado: Mapped[str] = mapped_column(String(20), nullable=False, default="Prevista")
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
     apolice: Mapped["Apolice"] = relationship("Apolice", back_populates="comissoes")
     pagamento: Mapped["Pagamento | None"] = relationship("Pagamento", back_populates="comissoes")

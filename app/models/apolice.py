@@ -41,9 +41,9 @@ class Apolice(Base):
     alerta_renovacao_enviado: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
     vendedor_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
-    deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
 
     client: Mapped["Client"] = relationship("Client", back_populates="apolices", lazy="selectin")
     vendedor: Mapped["User | None"] = relationship("User", foreign_keys="[Apolice.vendedor_id]", lazy="selectin")

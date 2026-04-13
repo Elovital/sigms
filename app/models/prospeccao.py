@@ -30,9 +30,9 @@ class Prospeccao(Base):
     data_seguimento: Mapped[str | None] = mapped_column(String(10), nullable=True)
     apolice_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("apolices.id"), nullable=True)
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
-    deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
 
     client: Mapped["Client"] = relationship("Client", lazy="selectin")
     seguradora: Mapped["Seguradora | None"] = relationship("Seguradora", lazy="selectin")

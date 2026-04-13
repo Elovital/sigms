@@ -19,10 +19,10 @@ class Client(Base):
     provincia: Mapped[str | None] = mapped_column(String(50), nullable=True)
     municipio: Mapped[str | None] = mapped_column(String(100), nullable=True)
     rgpd_aceite: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    anonymized_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    anonymized_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
 
     contacts: Mapped[list["Contact"]] = relationship("Contact", back_populates="client", cascade="all, delete-orphan", lazy="selectin")
     rgpd_logs: Mapped[list["RgpdConsentLog"]] = relationship("RgpdConsentLog", back_populates="client")
@@ -38,7 +38,7 @@ class Contact(Base):
     tipo: Mapped[str] = mapped_column(String(20), nullable=False)  # telefone/telemovel/email/fax
     valor: Mapped[str] = mapped_column(String(100), nullable=False)
     principal: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
     client: Mapped["Client"] = relationship("Client", back_populates="contacts")
 
@@ -53,6 +53,6 @@ class RgpdConsentLog(Base):
     user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
     ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
     client: Mapped["Client"] = relationship("Client", back_populates="rgpd_logs")

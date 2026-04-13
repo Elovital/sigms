@@ -20,6 +20,6 @@ class Interacao(Base):
     proximo_contacto: Mapped[str | None] = mapped_column(String(10), nullable=True)
     lembrete_ativo: Mapped[bool] = mapped_column(Boolean, default=True)
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
     client: Mapped["Client"] = relationship("Client")

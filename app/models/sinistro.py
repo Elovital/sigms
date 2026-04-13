@@ -20,8 +20,8 @@ class Sinistro(Base):
     perito: Mapped[str | None] = mapped_column(String(100), nullable=True)
     notas: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
 
     apolice: Mapped["Apolice"] = relationship("Apolice", back_populates="sinistros")
     client: Mapped["Client"] = relationship("Client", back_populates="sinistros")
@@ -37,6 +37,6 @@ class SinistroDoc(Base):
     path: Mapped[str] = mapped_column(String(500), nullable=False)
     tipo: Mapped[str | None] = mapped_column(String(50), nullable=True)
     uploaded_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
     sinistro: Mapped["Sinistro"] = relationship("Sinistro", back_populates="docs")

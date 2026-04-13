@@ -159,36 +159,6 @@ async def root():
     return {"message": "SIGMS ELOVITAL v1.0 — API running"}
 
 
-@app.get("/debug-login")
-async def debug_login():
-    """Diagnóstico temporário — REMOVER após fix"""
-    from sqlalchemy import text, select
-    from app.database import AsyncSessionLocal
-    from app.models.user import User
-    results = {}
-    try:
-        async with AsyncSessionLocal() as db:
-            r = await db.execute(select(User).where(User.username == "admin"))
-            user = r.scalar_one_or_none()
-            if user:
-                results["user_found"] = True
-                results["hashed_password_prefix"] = user.hashed_password[:10]
-                results["must_change"] = user.must_change_password
-                try:
-                    import bcrypt
-                    ok = bcrypt.checkpw(b"Admin@2026!", user.hashed_password.encode())
-                    results["bcrypt_ok"] = ok
-                except Exception as e:
-                    results["bcrypt_error"] = str(e)
-            else:
-                results["user_found"] = False
-                count = await db.execute(text("SELECT COUNT(*) FROM users"))
-                results["user_count"] = count.scalar()
-    except Exception as e:
-        results["db_error"] = str(e)[:400]
-    return results
-
-
 @app.get("/health")
 async def health():
     from sqlalchemy import text
