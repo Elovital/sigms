@@ -615,12 +615,57 @@ function gerarPDF() {
 }
 
 function pdfStyle() {
-  return `<style>body{font-family:Arial,sans-serif;font-size:12px;color:#111;margin:0;padding:18px}
-h2{font-size:16px;color:#1a56db;margin:0}h3{font-size:13px;color:#374151;margin:14px 0 6px;border-bottom:2px solid #1a56db;padding-bottom:3px}
-table{width:100%;border-collapse:collapse;margin-bottom:14px}th{background:#1f2937;color:white;padding:7px 10px;font-size:11px;text-align:left}
-td{border-bottom:1px solid #e5e7eb;padding:5px 10px;font-size:11px}tr:nth-child(even)td{background:#f9fafb}
-.rec{background:#eff6ff;border:1px solid #1a56db40;border-radius:8px;padding:12px 16px;margin-top:14px}
-@media print{@page{margin:12mm}body{padding:0}}</style>`;
+  return `<style>
+@page{size:A4 landscape;margin:14mm 12mm 14mm 12mm}
+*{box-sizing:border-box}
+body{font-family:Arial,sans-serif;font-size:11px;color:#111;margin:0;padding:0}
+/* cabeçalho */
+.pdf-header{display:flex;justify-content:space-between;align-items:center;
+  padding:10px 16px 10px 16px;background:#0f172a;color:#fff;margin-bottom:12px}
+.pdf-header-left{display:flex;align-items:center;gap:12px}
+.pdf-logo{width:44px;height:44px;border-radius:8px;background:#1a56db;
+  display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0}
+.pdf-brand{display:flex;flex-direction:column}
+.pdf-brand-name{font-size:15px;font-weight:800;letter-spacing:.5px;color:#fff}
+.pdf-brand-sub{font-size:9px;color:#94a3b8;margin-top:1px}
+.pdf-contacts{text-align:right;font-size:9px;color:#94a3b8;line-height:1.7}
+.pdf-contacts a{color:#60a5fa;text-decoration:none}
+/* título do documento */
+.pdf-title-bar{padding:0 4px 8px 4px;border-bottom:3px solid #1a56db;margin-bottom:10px;
+  display:flex;justify-content:space-between;align-items:flex-end}
+.pdf-title-bar h2{font-size:14px;color:#1a56db;margin:0;font-weight:800}
+.pdf-title-bar .pdf-date{font-size:9px;color:#6b7280}
+h3{font-size:11px;color:#374151;margin:12px 0 5px;border-bottom:2px solid #1a56db;padding-bottom:2px;font-weight:700}
+table{width:100%;border-collapse:collapse;margin-bottom:12px}
+th{background:#1f2937;color:white;padding:6px 8px;font-size:10px;text-align:left}
+td{border-bottom:1px solid #e5e7eb;padding:4px 8px;font-size:10px}
+tr:nth-child(even)td{background:#f9fafb}
+.rec{background:#eff6ff;border:1px solid #1a56db40;border-radius:6px;padding:10px 14px;margin-top:12px;font-size:10px}
+/* rodapé */
+.pdf-footer{margin-top:14px;padding-top:6px;border-top:1px solid #e5e7eb;
+  text-align:center;font-size:8px;color:#9ca3af}
+@media print{body{padding:0}.pdf-header{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+th{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style>`;
+}
+
+function pdfHeader() {
+  return `<div class="pdf-header">
+  <div class="pdf-header-left">
+    <div class="pdf-logo">🛡️</div>
+    <div class="pdf-brand">
+      <span class="pdf-brand-name">ELOVITAL</span>
+      <span class="pdf-brand-sub">Mediação de Seguros · SIGMS</span>
+    </div>
+  </div>
+  <div class="pdf-contacts">
+    <div>📧 contato@elovital.com</div>
+    <div>📞 +244 929 494 085</div>
+  </div>
+</div>`;
+}
+
+function pdfFooter() {
+  return `<div class="pdf-footer">ELOVITAL — Mediação de Seguros · contato@elovital.com · +244 929 494 085 · Documento gerado em ${new Date().toLocaleDateString('pt-AO')} às ${new Date().toLocaleTimeString('pt-AO',{hour:'2-digit',minute:'2-digit'})}</div>`;
 }
 
 function buildPDFSaude() {
@@ -635,10 +680,11 @@ function buildPDFSaude() {
     }).join('');
     return `<tr><td>${c.icon} ${c.label}</td>${cells}</tr>`;
   }).join('');
-  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Comparativo Saúde</title>${pdfStyle()}</head><body>
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;padding-bottom:10px;border-bottom:3px solid #1a56db">
-    <div><h2>📊 Mapa Comparativo — Seguro de Saúde</h2>
-    <p style="margin:3px 0 0;font-size:11px;color:#6b7280">SIGMS ELOVITAL · ${new Date().toLocaleDateString('pt-AO')}</p></div>
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Comparativo Saúde — ELOVITAL</title>${pdfStyle()}</head><body>
+  ${pdfHeader()}
+  <div class="pdf-title-bar">
+    <h2>📊 Mapa Comparativo — Seguro de Saúde</h2>
+    <span class="pdf-date">Emitido em ${new Date().toLocaleDateString('pt-AO')}</span>
   </div>
   <h3>Coberturas</h3>
   <table><thead><tr><th>COBERTURA</th>${segs.map((s,i)=>`<th style="background:${CORES[i].primary}">${esc(s.nome||`Seg. ${i+1}`)}${s.plano?` · ${esc(s.plano)}`:''}</th>`).join('')}</tr></thead>
@@ -648,6 +694,7 @@ function buildPDFSaude() {
   <table><thead><tr><th>Seguradora</th><th style="text-align:center">Cobertura</th><th style="text-align:center">Co-Pag.</th><th style="text-align:center">Prémio</th><th style="text-align:center">Score</th></tr></thead>
   <tbody>${scores.map((sc,i)=>{const r=sorted.findIndex(s=>s.idx===i);return`<tr><td>${MEDAL[r]} <strong>${esc(sc.nome)}</strong></td><td style="text-align:center">${sc.dims.cobertura}/10</td><td style="text-align:center">${sc.dims.copagamento}/10</td><td style="text-align:center">${sc.dims.premio}/10</td><td style="text-align:center;font-weight:800;color:${CORES[i].primary}">${sc.total}/100</td></tr>`;}).join('')}</tbody></table>
   <div class="rec">🏆 <strong>Recomendação IA:</strong> <strong>${esc(sorted[0].nome)}</strong> — Score <strong>${sorted[0].total}/100</strong>.</div>
+  ${pdfFooter()}
   </body></html>`;
 }
 
@@ -667,10 +714,15 @@ function buildPDFAuto() {
     const cells = segs.map(s=>`<td style="text-align:center;font-weight:600">${fn(s)?fmtN(fn(s))+' AOA':'—'}</td>`).join('');
     return `<tr><td style="font-weight:700">${l}</td>${cells}</tr>`;
   }).join('');
-  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Comparativo Automóvel</title>${pdfStyle()}</head><body>
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;padding-bottom:10px;border-bottom:3px solid #1a56db">
-    <div><h2>🚗 Mapa Comparativo — Seguro Automóvel</h2>
-    <p style="margin:3px 0 0;font-size:11px;color:#6b7280">${veic.tipo_cobertura||''}${veic.marca?' · '+veic.marca:''} ${veic.modelo||''} ${veic.ano||''} · SIGMS ELOVITAL · ${new Date().toLocaleDateString('pt-AO')}</p></div>
+  const veicInfo = [veic.tipo_cobertura, veic.marca, veic.modelo, veic.ano].filter(Boolean).join(' · ');
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Comparativo Automóvel — ELOVITAL</title>${pdfStyle()}</head><body>
+  ${pdfHeader()}
+  <div class="pdf-title-bar">
+    <div>
+      <h2>🚗 Mapa Comparativo — Seguro Automóvel</h2>
+      ${veicInfo?`<div style="font-size:9px;color:#6b7280;margin-top:2px">${veicInfo}${veic.valor_veiculo?' · Valor: '+fmtN(veic.valor_veiculo)+' AOA':''}</div>`:''}
+    </div>
+    <span class="pdf-date">Emitido em ${new Date().toLocaleDateString('pt-AO')}</span>
   </div>
   <h3>Coberturas & Prémios</h3>
   <table><thead><tr><th>COBERTURA / PRÉMIO</th>${segs.map((s,i)=>`<th style="background:${CORES[i].primary}">${esc(s.nome||`Seg. ${i+1}`)}${s.plano?` · ${esc(s.plano)}`:''}</th>`).join('')}</tr></thead>
@@ -679,6 +731,7 @@ function buildPDFAuto() {
   <table><thead><tr><th>Seguradora</th><th style="text-align:center">Cobertura</th><th style="text-align:center">Prémio</th><th style="text-align:center">Franquia</th><th style="text-align:center">Score</th></tr></thead>
   <tbody>${scores.map((sc,i)=>{const r=sorted.findIndex(s=>s.idx===i);return`<tr><td>${MEDAL[r]} <strong>${esc(sc.nome)}</strong></td><td style="text-align:center">${sc.dims.cobertura}/10</td><td style="text-align:center">${sc.dims.premio}/10</td><td style="text-align:center">${sc.dims.franquia}/10</td><td style="text-align:center;font-weight:800;color:${CORES[i].primary}">${sc.total}/100</td></tr>`;}).join('')}</tbody></table>
   <div class="rec">🏆 <strong>Recomendação IA:</strong> <strong>${esc(sorted[0].nome)}</strong> — Score <strong>${sorted[0].total}/100</strong>.</div>
+  ${pdfFooter()}
   </body></html>`;
 }
 
