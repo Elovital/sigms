@@ -140,25 +140,25 @@ function buildRoot() {
   </div>
 
   <!-- Tabs -->
-  <div style="display:flex;gap:4px;margin-bottom:20px;border-bottom:2px solid var(--gray-200);padding-bottom:0">
+  <div style="display:flex;gap:2px;margin-bottom:20px;border-bottom:2px solid var(--gray-200);padding-bottom:0;overflow-x:auto;scrollbar-width:thin;flex-shrink:0">
     <button id="tab-saude" class="cot-tab active" data-tab="saude"
-      style="padding:10px 20px;font-size:13px;font-weight:600;border:none;border-bottom:3px solid var(--primary);background:none;color:var(--primary);cursor:pointer;margin-bottom:-2px">
-      🏥 Seguro de Saúde
+      style="padding:9px 14px;font-size:12.5px;font-weight:600;border:none;border-bottom:3px solid var(--primary);background:none;color:var(--primary);cursor:pointer;margin-bottom:-2px;white-space:nowrap;flex-shrink:0">
+      🏥 Saúde
     </button>
     <button id="tab-auto" class="cot-tab" data-tab="auto"
-      style="padding:10px 20px;font-size:13px;font-weight:600;border:none;border-bottom:3px solid transparent;background:none;color:var(--gray-500);cursor:pointer;margin-bottom:-2px">
-      🚗 Seguro Automóvel
+      style="padding:9px 14px;font-size:12.5px;font-weight:600;border:none;border-bottom:3px solid transparent;background:none;color:var(--gray-500);cursor:pointer;margin-bottom:-2px;white-space:nowrap;flex-shrink:0">
+      🚗 Automóvel
     </button>
     <button id="tab-multi" class="cot-tab" data-tab="multi"
-      style="padding:10px 20px;font-size:13px;font-weight:600;border:none;border-bottom:3px solid transparent;background:none;color:var(--gray-500);cursor:pointer;margin-bottom:-2px">
+      style="padding:9px 14px;font-size:12.5px;font-weight:600;border:none;border-bottom:3px solid transparent;background:none;color:var(--gray-500);cursor:pointer;margin-bottom:-2px;white-space:nowrap;flex-shrink:0">
       🏠 Multirisco
     </button>
     <button id="tab-at" class="cot-tab" data-tab="at"
-      style="padding:10px 20px;font-size:13px;font-weight:600;border:none;border-bottom:3px solid transparent;background:none;color:var(--gray-500);cursor:pointer;margin-bottom:-2px">
-      👷 Acidente de Trabalho
+      style="padding:9px 14px;font-size:12.5px;font-weight:600;border:none;border-bottom:3px solid transparent;background:none;color:var(--gray-500);cursor:pointer;margin-bottom:-2px;white-space:nowrap;flex-shrink:0">
+      👷 Ac. Trabalho
     </button>
     <button id="tab-historico" class="cot-tab" data-tab="historico"
-      style="padding:10px 20px;font-size:13px;font-weight:600;border:none;border-bottom:3px solid transparent;background:none;color:var(--gray-500);cursor:pointer;margin-bottom:-2px">
+      style="padding:9px 14px;font-size:12.5px;font-weight:600;border:none;border-bottom:3px solid transparent;background:none;color:var(--gray-500);cursor:pointer;margin-bottom:-2px;white-space:nowrap;flex-shrink:0">
       📋 Histórico
     </button>
   </div>
