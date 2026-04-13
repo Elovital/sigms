@@ -1,4 +1,5 @@
 """SIGMS ELOVITAL - Sistema Integrado de Gestão de Mediação de Seguros"""
+import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
@@ -10,14 +11,28 @@ from app.config import settings
 from app.database import create_tables
 from app.services.scheduler_service import start_scheduler, stop_scheduler
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Path("data").mkdir(exist_ok=True)
     Path("data/backups").mkdir(exist_ok=True)
     Path("data/archive").mkdir(exist_ok=True)
-    await create_tables()
-    await seed_defaults()
+    logger.info(f"[SIGMS] DATABASE_URL driver: {settings.DATABASE_URL.split('://')[0]}")
+    try:
+        await create_tables()
+        logger.info("[SIGMS] Tabelas criadas/verificadas com sucesso")
+    except Exception as e:
+        logger.error(f"[SIGMS] ERRO ao criar tabelas: {e}")
+        raise
+    try:
+        await seed_defaults()
+        logger.info("[SIGMS] seed_defaults concluído")
+    except Exception as e:
+        logger.error(f"[SIGMS] ERRO em seed_defaults: {e}")
+        raise
     start_scheduler()
     yield
     stop_scheduler()
