@@ -13,11 +13,25 @@ from app.services.scheduler_service import start_scheduler, stop_scheduler
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    import os, logging
     Path("data").mkdir(exist_ok=True)
     Path("data/backups").mkdir(exist_ok=True)
     Path("data/archive").mkdir(exist_ok=True)
     await create_tables()
     await seed_defaults()
+    reset_pw = os.environ.get("RESET_ADMIN_PASSWORD")
+    if reset_pw:
+        from app.database import AsyncSessionLocal
+        from app.models.user import User
+        from app.services.auth_service import hash_password
+        from sqlalchemy import select
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(select(User).where(User.username == "admin"))
+            user = result.scalar_one_or_none()
+            if user:
+                user.hashed_password = hash_password(reset_pw)
+                await db.commit()
+                logging.warning("RESET_ADMIN_PASSWORD aplicado. Remova esta variável do Render.")
     start_scheduler()
     yield
     stop_scheduler()
