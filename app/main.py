@@ -82,13 +82,17 @@ async def seed_defaults():
 
         # Admin padrão
         existing_admin = await db.execute(select(User).where(User.username == "admin"))
-        if not existing_admin.scalar_one_or_none():
+        admin = existing_admin.scalar_one_or_none()
+        if not admin:
             db.add(User(
                 username="admin",
                 email="admin@elovital.ao",
                 hashed_password=hash_password("Admin@2026!"),
                 role="admin",
+                must_change_password=False,
             ))
+        elif admin.must_change_password:
+            admin.must_change_password = False
 
         await db.commit()
 
