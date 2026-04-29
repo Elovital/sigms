@@ -46,6 +46,7 @@ export async function renderProspeccao(container) {
           <option value="">Todos estados</option>
           ${ESTADOS.map(e => `<option value="${e.value}">${e.emoji} ${e.value}</option>`).join('')}
         </select>
+        <button class="btn btn-secondary" id="btn-new-comparacao">📊 Nova Comparação</button>
         <button class="btn btn-primary" id="btn-new-prosp">+ Nova Prospecção</button>
       </div>
     </div>
@@ -112,6 +113,25 @@ export async function renderProspeccao(container) {
         </div>
       </div>
       <div class="form-group">
+        <label>Próteses e Ortoses</label>
+        <select id="p-proteses-ortoses">
+          <option value="">— Não especificado —</option>
+          <option value="Incluída">✅ Incluída</option>
+          <option value="Excluída">❌ Excluída</option>
+          <option value="Limitada">⚠️ Limitada</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Copagamento Fora da Rede (%)</label>
+          <input type="number" id="p-copagamento" step="0.01" min="0" max="100" placeholder="ex: 20">
+        </div>
+        <div class="form-group">
+          <label>Período de Carência (dias)</label>
+          <input type="number" id="p-carencia" step="1" min="0" placeholder="ex: 90">
+        </div>
+      </div>
+      <div class="form-group">
         <label>Notas</label>
         <textarea id="p-notas" rows="3" placeholder="Observações, condições especiais, histórico..."></textarea>
       </div>
@@ -135,6 +155,60 @@ export async function renderProspeccao(container) {
       <div id="prosp-estado-titulo" style="font-weight:600;margin-bottom:16px;color:var(--gray-700)"></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px" id="estado-buttons"></div>
     </div>
+  </div>
+</div>
+
+<!-- Comparação Modal -->
+<div class="modal-overlay hidden" id="comparacao-modal">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <span class="modal-title" id="comparacao-modal-title">Nova Comparação</span>
+      <button class="btn btn-icon btn-secondary" onclick="document.getElementById('comparacao-modal').classList.add('hidden')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Título da Comparação *</label>
+        <input type="text" id="c-titulo" placeholder="ex: Seguros de Saúde - Três Planos">
+      </div>
+      <div class="form-group">
+        <label>Cliente *</label>
+        <input type="text" id="c-client-search" placeholder="Pesquisar cliente por nome ou NIF...">
+        <input type="hidden" id="c-client-id">
+        <div id="c-client-suggestions" style="border:1px solid var(--gray-200);border-radius:6px;max-height:150px;overflow-y:auto;display:none;background:white;position:absolute;z-index:100;width:calc(100% - 48px)"></div>
+        <div class="field-hint" id="c-client-selected"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Data de Seguimento</label>
+          <input type="date" id="c-data-seguimento">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Notas</label>
+        <textarea id="c-notas" rows="2" placeholder="Observações..."></textarea>
+      </div>
+      <div style="margin-top:20px;padding-top:20px;border-top:1px solid var(--gray-200)">
+        <h4 style="margin-bottom:12px">Planos a Comparar (máx. 4)</h4>
+        <div id="comparacao-planos-list" style="margin-bottom:12px;max-height:300px;overflow-y:auto"></div>
+        <button class="btn btn-secondary btn-sm" id="btn-add-plano" style="width:100%">+ Adicionar Plano</button>
+      </div>
+      <div id="comparacao-form-error" class="alert alert-danger hidden" style="margin-top:12px"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="document.getElementById('comparacao-modal').classList.add('hidden')">Cancelar</button>
+      <button class="btn btn-primary" id="btn-save-comparacao">Guardar Comparação</button>
+    </div>
+  </div>
+</div>
+
+<!-- Quadro Comparativo Modal -->
+<div class="modal-overlay hidden" id="quadro-comparacao-modal">
+  <div class="modal" style="max-width:90vw;max-height:90vh;overflow:auto">
+    <div class="modal-header">
+      <span class="modal-title" id="quadro-titulo">Quadro Comparativo</span>
+      <button class="btn btn-icon btn-secondary" onclick="document.getElementById('quadro-comparacao-modal').classList.add('hidden')">✕</button>
+    </div>
+    <div class="modal-body" id="quadro-comparacao-content" style="overflow-x:auto"></div>
   </div>
 </div>`;
 
@@ -170,12 +244,35 @@ export async function renderProspeccao(container) {
 
   document.getElementById('btn-new-prosp').addEventListener('click', () => openProspModal());
   document.getElementById('btn-save-prosp').addEventListener('click', saveProspeccao);
+  document.getElementById('btn-new-comparacao').addEventListener('click', () => openComparacaoModal());
   document.getElementById('prosp-search').addEventListener('input', debounce(e => {
     currentFilters.q = e.target.value; currentPage = 1; loadTable();
   }));
   document.getElementById('filter-estado-prosp').addEventListener('change', e => {
     currentFilters.estado = e.target.value; currentPage = 1; loadTable();
   });
+
+  // Client search para comparação
+  const clientSearchComp = document.getElementById('c-client-search');
+  clientSearchComp.addEventListener('input', debounce(async e => {
+    const q = e.target.value;
+    if (q.length < 2) { document.getElementById('c-client-suggestions').style.display = 'none'; return; }
+    const data = await get(`/clients?q=${q}&size=5`);
+    const sugg = document.getElementById('c-client-suggestions');
+    sugg.innerHTML = data.items.map(c =>
+      `<div style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--gray-100)" onmousedown="selectCompClient(${c.id},'${c.nome}','${c.nif}')">${c.nome} <span class="font-mono text-sm text-gray">${c.nif}</span></div>`
+    ).join('');
+    sugg.style.display = data.items.length ? 'block' : 'none';
+  }));
+
+  window.selectCompClient = (id, nome, nif) => {
+    document.getElementById('c-client-id').value = id;
+    document.getElementById('c-client-search').value = `${nome} (${nif})`;
+    document.getElementById('c-client-suggestions').style.display = 'none';
+  };
+
+  document.getElementById('btn-add-plano').addEventListener('click', addPlanoRow);
+  document.getElementById('btn-save-comparacao').addEventListener('click', saveComparacao);
 
   loadStats();
   loadTable();
@@ -313,6 +410,9 @@ function openProspModal(prosp = null) {
   document.getElementById('p-data-seguimento').value = prosp?.data_seguimento || '';
   document.getElementById('p-premio').value = prosp?.premio_estimado || '';
   document.getElementById('p-comissao-pct').value = prosp?.percentagem_comissao || '';
+  document.getElementById('p-proteses-ortoses').value = prosp?.proteses_ortoses || '';
+  document.getElementById('p-copagamento').value = prosp?.copagamento_fora_rede || '';
+  document.getElementById('p-carencia').value = prosp?.periodo_carencia || '';
   document.getElementById('p-notas').value = prosp?.notas || '';
   if (prosp?.seguradora_id) document.getElementById('p-seguradora').value = prosp.seguradora_id;
   else document.getElementById('p-seguradora').value = '';
@@ -346,6 +446,9 @@ async function saveProspeccao() {
     data_seguimento: document.getElementById('p-data-seguimento').value || null,
     premio_estimado: parseFloat(document.getElementById('p-premio').value) || null,
     percentagem_comissao: parseFloat(document.getElementById('p-comissao-pct').value) || null,
+    proteses_ortoses: document.getElementById('p-proteses-ortoses').value || null,
+    copagamento_fora_rede: parseFloat(document.getElementById('p-copagamento').value) || null,
+    periodo_carencia: parseInt(document.getElementById('p-carencia').value) || null,
     notas: document.getElementById('p-notas').value || null,
   };
 
@@ -361,5 +464,163 @@ async function saveProspeccao() {
     errEl.textContent = e.message; errEl.classList.remove('hidden');
   } finally {
     btn.disabled = false; btn.textContent = 'Guardar';
+  }
+}
+
+// ==================== COMPARAÇÃO DE COTAÇÕES ====================
+
+let comparacaoPlanos = []; // Armazena planos temporários durante edição
+let editingComparacaoId = null;
+
+function openComparacaoModal(comparacao = null) {
+  editingComparacaoId = comparacao?.id || null;
+  document.getElementById('comparacao-modal-title').textContent = comparacao ? 'Editar Comparação' : 'Nova Comparação';
+  document.getElementById('c-titulo').value = comparacao?.titulo || '';
+  document.getElementById('c-data-seguimento').value = comparacao?.data_seguimento || '';
+  document.getElementById('c-notas').value = comparacao?.notas || '';
+
+  if (comparacao?.client_id) {
+    document.getElementById('c-client-id').value = comparacao.client_id;
+    document.getElementById('c-client-search').value = comparacao.client_nome ? `${comparacao.client_nome}${comparacao.client_nif ? ' (' + comparacao.client_nif + ')' : ''}` : '';
+  } else {
+    document.getElementById('c-client-id').value = '';
+    document.getElementById('c-client-search').value = '';
+  }
+
+  // Carregar planos existentes ou inicializar vazios
+  comparacaoPlanos = comparacao?.prospeccoes ? [...comparacao.prospeccoes] : [];
+  renderComparacaoPlanos();
+
+  document.getElementById('comparacao-form-error').classList.add('hidden');
+  document.getElementById('comparacao-modal').classList.remove('hidden');
+}
+
+function renderComparacaoPlanos() {
+  const container = document.getElementById('comparacao-planos-list');
+  if (comparacaoPlanos.length === 0) {
+    container.innerHTML = '<div style="color:var(--gray-400);padding:12px;text-align:center">Nenhum plano adicionado</div>';
+    return;
+  }
+
+  container.innerHTML = comparacaoPlanos.map((p, idx) => `
+    <div style="padding:12px;border:1px solid var(--gray-200);border-radius:6px;margin-bottom:8px;background:var(--gray-50)">
+      <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px">
+        <strong>Plano ${idx + 1}</strong>
+        <button class="btn btn-sm btn-danger" onclick="removePlano(${idx})" type="button">🗑️</button>
+      </div>
+      <div class="form-row" style="gap:8px">
+        <select onchange="comparacaoPlanos[${idx}].seguradora_id = this.value; comparacaoPlanos[${idx}].seguradora = this.options[this.selectedIndex].text;" style="flex:1">
+          <option value="">— Seguradora —</option>
+          ${seguradoras.map(s => `<option value="${s.id}" ${p.seguradora_id == s.id ? 'selected' : ''}>${s.nome}</option>`).join('')}
+        </select>
+        <select onchange="comparacaoPlanos[${idx}].ramo_id = this.value; comparacaoPlanos[${idx}].ramo = this.options[this.selectedIndex].text;" style="flex:1">
+          <option value="">— Ramo —</option>
+          ${ramos.map(r => `<option value="${r.id}" ${p.ramo_id == r.id ? 'selected' : ''}>${r.nome}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-row" style="gap:8px;margin-top:8px">
+        <input type="number" placeholder="Prémio Est. (Kz)" value="${p.premio_estimado || ''}" onchange="comparacaoPlanos[${idx}].premio_estimado = parseFloat(this.value) || null;" style="flex:1"/>
+        <input type="number" placeholder="Comissão (%)" value="${p.percentagem_comissao || ''}" onchange="comparacaoPlanos[${idx}].percentagem_comissao = parseFloat(this.value) || null;" style="flex:1"/>
+      </div>
+      <div class="form-row" style="gap:8px;margin-top:8px">
+        <select onchange="comparacaoPlanos[${idx}].proteses_ortoses = this.value;" style="flex:1">
+          <option value="">Próteses/Ortoses</option>
+          <option value="Incluída" ${p.proteses_ortoses === 'Incluída' ? 'selected' : ''}>✅ Incluída</option>
+          <option value="Excluída" ${p.proteses_ortoses === 'Excluída' ? 'selected' : ''}>❌ Excluída</option>
+          <option value="Limitada" ${p.proteses_ortoses === 'Limitada' ? 'selected' : ''}>⚠️ Limitada</option>
+        </select>
+        <input type="number" placeholder="Copagamento Fora (%)" value="${p.copagamento_fora_rede || ''}" onchange="comparacaoPlanos[${idx}].copagamento_fora_rede = parseFloat(this.value) || null;" style="flex:1"/>
+      </div>
+      <div class="form-row" style="gap:8px;margin-top:8px">
+        <input type="number" placeholder="Período Carência (dias)" value="${p.periodo_carencia || ''}" onchange="comparacaoPlanos[${idx}].periodo_carencia = parseInt(this.value) || null;" style="flex:1"/>
+      </div>
+    </div>
+  `).join('');
+}
+
+window.removePlano = (idx) => {
+  comparacaoPlanos.splice(idx, 1);
+  renderComparacaoPlanos();
+};
+
+function addPlanoRow() {
+  if (comparacaoPlanos.length >= 4) {
+    alert('Máximo de 4 planos permitidos');
+    return;
+  }
+  comparacaoPlanos.push({
+    seguradora_id: null,
+    ramo_id: null,
+    titulo: '',
+    estado: 'Nova',
+    premio_estimado: null,
+    percentagem_comissao: null,
+    proteses_ortoses: null,
+    copagamento_fora_rede: null,
+    periodo_carencia: null,
+  });
+  renderComparacaoPlanos();
+}
+
+async function saveComparacao() {
+  const errEl = document.getElementById('comparacao-form-error');
+  errEl.classList.add('hidden');
+
+  const titulo = document.getElementById('c-titulo').value.trim();
+  const client_id = parseInt(document.getElementById('c-client-id').value);
+
+  if (!titulo) { errEl.textContent = 'O título é obrigatório.'; errEl.classList.remove('hidden'); return; }
+  if (!client_id) { errEl.textContent = 'Selecione um cliente.'; errEl.classList.remove('hidden'); return; }
+  if (comparacaoPlanos.length === 0) { errEl.textContent = 'Adicione pelo menos um plano.'; errEl.classList.remove('hidden'); return; }
+
+  const body = {
+    titulo,
+    client_id,
+    data_seguimento: document.getElementById('c-data-seguimento').value || null,
+    notas: document.getElementById('c-notas').value || null,
+  };
+
+  const btn = document.getElementById('btn-save-comparacao');
+  btn.disabled = true; btn.textContent = 'A guardar...';
+
+  try {
+    let comparacao;
+    if (editingComparacaoId) {
+      await put(`/prospeccao/comparacao/${editingComparacaoId}`, body);
+      comparacao = await get(`/prospeccao/comparacao/${editingComparacaoId}`);
+    } else {
+      comparacao = await post('/prospeccao/comparacao', body);
+    }
+
+    // Salvar cada plano
+    for (let p of comparacaoPlanos) {
+      const planoBody = {
+        client_id,
+        seguradora_id: p.seguradora_id || null,
+        ramo_id: p.ramo_id || null,
+        comparacao_id: comparacao.id,
+        titulo: p.titulo || `Plano - ${p.seguradora || 'N/A'}`,
+        estado: 'Cotação Enviada',
+        premio_estimado: p.premio_estimado || null,
+        percentagem_comissao: p.percentagem_comissao || null,
+        proteses_ortoses: p.proteses_ortoses || null,
+        copagamento_fora_rede: p.copagamento_fora_rede || null,
+        periodo_carencia: p.periodo_carencia || null,
+      };
+      if (p.id) {
+        await put(`/prospeccao/${p.id}`, planoBody);
+      } else {
+        await post('/prospeccao', planoBody);
+      }
+    }
+
+    toast('Comparação guardada com sucesso');
+    document.getElementById('comparacao-modal').classList.add('hidden');
+    loadTable();
+    loadStats();
+  } catch (e) {
+    errEl.textContent = e.message; errEl.classList.remove('hidden');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Guardar Comparação';
   }
 }

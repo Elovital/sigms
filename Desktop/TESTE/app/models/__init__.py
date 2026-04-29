@@ -6,11 +6,11 @@ from app.models.risco import RiscoAuto, RiscoSaudeVida, Beneficiario, RiscoEmpre
 from app.models.sinistro import Sinistro, SinistroDoc
 from app.models.audit import AuditLog
 from app.models.acompanhamento import Interacao
-from app.models.prospeccao import Prospeccao
+from app.models.prospeccao import Prospeccao, CotacaoComparacao
 
 __all_models__ = [
     User, RefreshToken, Client, Contact, RgpdConsentLog,
     Apolice, Seguradora, Ramo, Premio, Pagamento, Comissao,
     RiscoAuto, RiscoSaudeVida, Beneficiario, RiscoEmpresa,
-    Sinistro, SinistroDoc, AuditLog, Interacao, Prospeccao,
+    Sinistro, SinistroDoc, AuditLog, Interacao, Prospeccao, CotacaoComparacao,
 ]
