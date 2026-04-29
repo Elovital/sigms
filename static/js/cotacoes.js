@@ -1,4 +1,4 @@
-/* SIGMS — Mapa Comparativo de Cotações (Saúde + Automóvel) */
+/* SIGMS — Mapa Comparativo de Cotações (Saúde + Automóvel + Multirisco + Acidente de Trabalho) */
 import { get, post, put, del } from './api.js';
 
 /* ═══════════════════════════ CONSTANTES ═══════════════════════════ */
@@ -33,15 +33,47 @@ const CORES = [
   { primary: '#1a56db', light: '#e8f0fe' },
   { primary: '#057a55', light: '#def7ec' },
   { primary: '#7e3af2', light: '#ede9fe' },
+  { primary: '#b45309', light: '#fef3c7' },
 ];
-const MEDAL = ['🥇', '🥈', '🥉'];
+const MEDAL = ['🥇', '🥈', '🥉', '🏅'];
 const TIPOS_COBERTURA_AUTO = ['RC Obrigatória', 'RC + Danos Próprios', 'Todos os Riscos', 'RC + Furto/Incêndio'];
+
+const COBERTURAS_MULTI = [
+  { id: 'incendio_nat',  label: 'Incêndio e Elementos da Natureza', peso: 2.0, icon: '🔥', obrig: true },
+  { id: 'danos_agua',    label: 'Danos por Água',                   peso: 1.6, icon: '💧' },
+  { id: 'rc',            label: 'Responsabilidade Civil',            peso: 1.5, icon: '⚖️' },
+  { id: 'furto_van',     label: 'Furto, Roubo e Vandalismo',         peso: 1.4, icon: '🔐' },
+  { id: 'vidros',        label: 'Quebra de Vidros',                  peso: 0.9, icon: '🪟' },
+  { id: 'avaria_elec',   label: 'Avaria de Equipamentos Electrónicos', peso: 1.1, icon: '💻' },
+  { id: 'perda_rendas',  label: 'Perda de Rendas',                   peso: 1.0, icon: '🏠' },
+  { id: 'remocao',       label: 'Remoção de Escombros / Demolição',  peso: 0.8, icon: '🏗️' },
+  { id: 'assist_24h',    label: 'Assistência ao Lar 24h',            peso: 1.2, icon: '🛠️' },
+  { id: 'danos_esteticos', label: 'Danos Estéticos',                 peso: 0.7, icon: '🎨' },
+];
+
+const COBERTURAS_AT = [
+  { id: 'morte_ac',      label: 'Morte por Acidente',                peso: 2.0, icon: '💼', obrig: true },
+  { id: 'ipt',           label: 'Incapacidade Permanente Total',     peso: 2.0, icon: '🩼', obrig: true },
+  { id: 'ipp',           label: 'Incapacidade Permanente Parcial',   peso: 1.8, icon: '🦽' },
+  { id: 'itt',           label: 'Incapacidade Temporária',           peso: 1.5, icon: '🛏️' },
+  { id: 'desp_medicas',  label: 'Despesas Médicas e Hospitalares',   peso: 1.6, icon: '🏥' },
+  { id: 'desp_transp',   label: 'Despesas de Transporte e Resgate',  peso: 1.0, icon: '🚑' },
+  { id: 'reabilitacao',  label: 'Reabilitação Profissional',         peso: 1.2, icon: '🔄' },
+  { id: 'cap_adicional', label: 'Capital Adicional por Invalidez',   peso: 1.1, icon: '💰' },
+  { id: 'assist_jur',    label: 'Assistência Jurídica',              peso: 0.9, icon: '📋' },
+  { id: 'doencas_prof',  label: 'Doenças Profissionais',             peso: 1.3, icon: '🔬' },
+];
+
+const TIPOS_IMOVEL = ['Habitação', 'Escritório / Serviços', 'Comércio / Retalho', 'Indústria / Armazém', 'Misto'];
+const SECTORES_AT  = ['Construção Civil', 'Indústria', 'Comércio', 'Serviços', 'Saúde', 'Educação', 'Transportes', 'Agricultura', 'Outro'];
 
 /* ═══════════════════════════ ESTADO ═══════════════════════════ */
 let state = {
-  tab: 'saude',   // 'saude' | 'auto'
+  tab: 'saude',   // 'saude' | 'auto' | 'multi' | 'at'
   saude: { segs: [], radarChart: null, cliente: '' },
   auto:  { segs: [], radarChart: null, veiculo: {}, cliente: '' },
+  multi: { segs: [], radarChart: null, imovel: {}, cliente: '' },
+  at:    { segs: [], radarChart: null, empresa: {}, cliente: '' },
 };
 
 /* ═══════════════════════════ ENTRY POINT ═══════════════════════════ */
@@ -49,13 +81,21 @@ export async function renderCotacoes(container) {
   let segList = [];
   try { segList = (await get('/apolices/lookup/seguradoras')).map(s => s.nome); } catch {}
 
-  state.saude.segs    = [0,1,2].map(() => newSegSaude());
-  state.auto.segs     = [0,1,2].map(() => newSegAuto());
+  state.saude.segs    = [0,1,2,3].map(() => newSegSaude());
+  state.auto.segs     = [0,1,2,3].map(() => newSegAuto());
+  state.multi.segs    = [0,1,2,3].map(() => newSegMulti());
+  state.at.segs       = [0,1,2,3].map(() => newSegAT());
   state.auto.veiculo  = { tipo_cobertura: '', marca: '', modelo: '', ano: '', valor: '' };
+  state.multi.imovel  = { tipo: '', localizacao: '', area: '', valor_imovel: '', valor_recheio: '' };
+  state.at.empresa    = { sector: '', num_trabalhadores: '', capital_por_trabalhador: '' };
   state.saude.radarChart = null;
   state.auto.radarChart  = null;
+  state.multi.radarChart = null;
+  state.at.radarChart    = null;
   state.saude.cliente = '';
   state.auto.cliente  = '';
+  state.multi.cliente = '';
+  state.at.cliente    = '';
 
   container.innerHTML = buildRoot();
   bindTabEvents(segList);
@@ -63,9 +103,18 @@ export async function renderCotacoes(container) {
 }
 
 function newSegSaude() {
-  return { nome: '', plano: '', premio: '',
+  return { nome: '', plano: '', premio: '', carencia: '', copag_fora_rede: '',
     coberturas: Object.fromEntries(COBERTURAS_SAUDE.map(c => [c.id, { incluida: false, copag: '', limite: '' }])) };
 }
+function newSegMulti() {
+  return { nome: '', plano: '', premio_anual: 0, premio_semestral: 0, premio_trimestral: 0, franquia: 0,
+    coberturas: Object.fromEntries(COBERTURAS_MULTI.map(c => [c.id, { incluida: c.obrig||false }])) };
+}
+function newSegAT() {
+  return { nome: '', plano: '', premio_anual: 0, premio_semestral: 0, premio_trimestral: 0, capital_morte: 0,
+    coberturas: Object.fromEntries(COBERTURAS_AT.map(c => [c.id, { incluida: c.obrig||false }])) };
+}
+
 function newSegAuto() {
   return { nome: '', plano: '', premio_anual: '', premio_semestral: '', premio_trimestral: '', franquia: '',
     coberturas: Object.fromEntries(COBERTURAS_AUTO.map(c => [c.id, { incluida: c.obrig || false, franquia: '' }])) };
@@ -82,7 +131,7 @@ function buildRoot() {
         <span style="font-size:28px">📊</span>
         <h2 style="font-size:20px;font-weight:700;color:var(--gray-900);margin:0">Mapa Comparativo de Cotações</h2>
       </div>
-      <p style="font-size:13px;color:var(--gray-500);margin:0">Compare 3 seguradoras · Avaliação inteligente de custo-benefício</p>
+      <p style="font-size:13px;color:var(--gray-500);margin:0">Compare até 4 seguradoras · Avaliação inteligente de custo-benefício</p>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button id="btn-limpar" class="btn btn-secondary" style="font-size:13px">🗑️ Limpar</button>
@@ -100,6 +149,14 @@ function buildRoot() {
     <button id="tab-auto" class="cot-tab" data-tab="auto"
       style="padding:10px 20px;font-size:13px;font-weight:600;border:none;border-bottom:3px solid transparent;background:none;color:var(--gray-500);cursor:pointer;margin-bottom:-2px">
       🚗 Seguro Automóvel
+    </button>
+    <button id="tab-multi" class="cot-tab" data-tab="multi"
+      style="padding:10px 20px;font-size:13px;font-weight:600;border:none;border-bottom:3px solid transparent;background:none;color:var(--gray-500);cursor:pointer;margin-bottom:-2px">
+      🏠 Multirisco
+    </button>
+    <button id="tab-at" class="cot-tab" data-tab="at"
+      style="padding:10px 20px;font-size:13px;font-weight:600;border:none;border-bottom:3px solid transparent;background:none;color:var(--gray-500);cursor:pointer;margin-bottom:-2px">
+      👷 Acidente de Trabalho
     </button>
     <button id="tab-historico" class="cot-tab" data-tab="historico"
       style="padding:10px 20px;font-size:13px;font-weight:600;border:none;border-bottom:3px solid transparent;background:none;color:var(--gray-500);cursor:pointer;margin-bottom:-2px">
@@ -163,6 +220,14 @@ function renderTab(segList) {
     el.innerHTML = buildAutoLayout(segList);
     bindAutoEvents(segList);
     updateAuto();
+  } else if (state.tab === 'multi') {
+    el.innerHTML = buildMultiLayout(segList);
+    bindMultiEvents(segList);
+    updateMulti();
+  } else if (state.tab === 'at') {
+    el.innerHTML = buildATLayout(segList);
+    bindATEvents(segList);
+    updateAT();
   } else {
     renderHistorico();
   }
@@ -184,8 +249,8 @@ function buildSaudeLayout(segList) {
     </div>
   </div>
 
-  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:24px" id="seg-cards-saude">
-    ${[0,1,2].map(i => buildSegCardSaude(i, segList)).join('')}
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px" id="seg-cards-saude">
+    ${[0,1,2,3].map(i => buildSegCardSaude(i, segList)).join('')}
   </div>
   <div class="card" style="margin-bottom:24px">
     <div class="card-header" style="background:var(--gray-900);color:white;border-radius:8px 8px 0 0">
@@ -214,11 +279,17 @@ function buildSegCardSaude(i, segList) {
       <label style="font-size:11px;font-weight:600;color:var(--gray-600);text-transform:uppercase;display:block;margin-bottom:3px">Seguradora</label>
       <input type="text" class="form-control" id="s-nome-${i}" list="sl-s-${i}" placeholder="Nome da seguradora" style="font-size:13px">
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
       <div><label style="font-size:11px;font-weight:600;color:var(--gray-600);text-transform:uppercase;display:block;margin-bottom:3px">Plano</label>
         <input type="text" class="form-control" id="s-plano-${i}" placeholder="Plano" style="font-size:13px"></div>
       <div><label style="font-size:11px;font-weight:600;color:var(--gray-600);text-transform:uppercase;display:block;margin-bottom:3px">Prémio Anual (AOA)</label>
         <input type="number" class="form-control" id="s-premio-${i}" placeholder="0" style="font-size:13px"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+      <div><label style="font-size:11px;font-weight:600;color:var(--gray-600);text-transform:uppercase;display:block;margin-bottom:3px">⏳ Carência (dias)</label>
+        <input type="number" class="form-control" id="s-carencia-${i}" placeholder="Ex: 90" min="0" style="font-size:13px"></div>
+      <div><label style="font-size:11px;font-weight:600;color:var(--gray-600);text-transform:uppercase;display:block;margin-bottom:3px">🌐 Co-pag. Fora Rede (%)</label>
+        <input type="number" class="form-control" id="s-copag-fora-${i}" placeholder="Ex: 30" min="0" max="100" style="font-size:13px"></div>
     </div>
     <div style="font-size:11px;font-weight:700;color:var(--gray-700);text-transform:uppercase;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid var(--gray-200)">Coberturas</div>
     ${COBERTURAS_SAUDE.map(c => `
@@ -236,8 +307,9 @@ function buildSegCardSaude(i, segList) {
 
 function bindSaudeEvents(segList) {
   document.getElementById('s-cliente')?.addEventListener('input', e => { state.saude.cliente = e.target.value; });
-  [0,1,2].forEach(i => {
-    ['nome','plano','premio'].forEach(f => document.getElementById(`s-${f}-${i}`)?.addEventListener('input', () => { readSegSaude(i); updateSaude(); }));
+  [0,1,2,3].forEach(i => {
+    ['nome','plano','premio','carencia'].forEach(f => document.getElementById(`s-${f}-${i}`)?.addEventListener('input', () => { readSegSaude(i); updateSaude(); }));
+    document.getElementById(`s-copag-fora-${i}`)?.addEventListener('input', () => { readSegSaude(i); updateSaude(); });
     COBERTURAS_SAUDE.forEach(c => {
       [`s-${i}-${c.id}-inc`,`s-${i}-${c.id}-cop`,`s-${i}-${c.id}-lim`].forEach(id => {
         const el = document.getElementById(id);
@@ -249,9 +321,11 @@ function bindSaudeEvents(segList) {
 
 function readSegSaude(i) {
   const s = state.saude.segs[i];
-  s.nome   = v(`s-nome-${i}`);
-  s.plano  = v(`s-plano-${i}`);
-  s.premio = parseFloat(v(`s-premio-${i}`)) || 0;
+  s.nome           = v(`s-nome-${i}`);
+  s.plano          = v(`s-plano-${i}`);
+  s.premio         = parseFloat(v(`s-premio-${i}`)) || 0;
+  s.carencia       = parseInt(v(`s-carencia-${i}`)) || 0;
+  s.copag_fora_rede = parseFloat(v(`s-copag-fora-${i}`)) || 0;
   COBERTURAS_SAUDE.forEach(c => {
     s.coberturas[c.id] = { incluida: chk(`s-${i}-${c.id}-inc`), copag: v(`s-${i}-${c.id}-cop`), limite: v(`s-${i}-${c.id}-lim`) };
   });
@@ -281,7 +355,11 @@ function updateTabelaSaude() {
   }).join('');
   const premios = segs.map((s,i) => !s.premio ? `<td style="text-align:center;color:var(--gray-400)">—</td>` :
     `<td style="text-align:center;background:${CORES[i].light};padding:8px"><span style="font-size:13px;font-weight:700;color:${CORES[i].primary}">${fmtN(s.premio)} AOA</span></td>`).join('');
-  document.getElementById('tabela-saude').innerHTML = buildTableHtml(labels, segs, rows, premios, 'Prémio Anual');
+  const carencias = segs.map((s,i) => !s.carencia ? `<td style="text-align:center;color:var(--gray-400)">—</td>` :
+    `<td style="text-align:center;background:${CORES[i].light};padding:8px"><span style="font-size:13px;font-weight:700;color:${CORES[i].primary}">${s.carencia} dias</span></td>`).join('');
+  const copagsFora = segs.map((s,i) => !s.copag_fora_rede ? `<td style="text-align:center;color:var(--gray-400)">—</td>` :
+    `<td style="text-align:center;background:${CORES[i].light};padding:8px"><span style="font-size:13px;font-weight:700;color:${CORES[i].primary}">${s.copag_fora_rede}%</span></td>`).join('');
+  document.getElementById('tabela-saude').innerHTML = buildTableHtml(labels, segs, rows, premios, 'Prémio Anual', carencias, copagsFora);
 }
 
 function calcScoresSaude() {
@@ -346,8 +424,8 @@ function buildAutoLayout(segList) {
   </div>
 
   <!-- 3 colunas de seguradoras -->
-  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:24px" id="seg-cards-auto">
-    ${[0,1,2].map(i => buildSegCardAuto(i, segList)).join('')}
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px" id="seg-cards-auto">
+    ${[0,1,2,3].map(i => buildSegCardAuto(i, segList)).join('')}
   </div>
 
   <!-- Tabela comparativa -->
@@ -413,7 +491,7 @@ function bindAutoEvents(segList) {
   ['a-tipo-cob','a-marca','a-modelo','a-ano','a-valor'].forEach(id => {
     document.getElementById(id)?.addEventListener('input', () => { readVeiculo(); updateAuto(); });
   });
-  [0,1,2].forEach(i => {
+  [0,1,2,3].forEach(i => {
     [`a-nome-${i}`,'a-plano-'+i,'a-franquia-'+i,'a-p-anual-'+i,'a-p-semestral-'+i,'a-p-trimestral-'+i,'a-p-mensal-'+i].forEach(id => {
       document.getElementById(id)?.addEventListener('input', () => { readSegAuto(i); updateAuto(); });
     });
@@ -531,22 +609,30 @@ function calcScoresAuto() {
 /* ══════════════════════════════════════════════════════════════
    COMPONENTES PARTILHADOS
 ══════════════════════════════════════════════════════════════ */
-function buildTableHtml(labels, segs, rows, extraRow, extraLabel) {
+function buildTableHtml(labels, segs, rows, extraRow, extraLabel, carencias='', copagsFora='') {
   return `
   <table style="width:100%;border-collapse:collapse">
     <thead>
       <tr style="background:var(--gray-800)">
-        <th style="padding:12px 14px;font-size:12px;font-weight:600;color:white;text-align:left;width:30%">COBERTURA</th>
-        ${labels.map((l,i)=>`<th style="padding:12px 8px;font-size:12px;font-weight:600;color:white;text-align:center;width:23%;border-left:1px solid rgba(255,255,255,.1)">
+        <th style="padding:12px 14px;font-size:12px;font-weight:600;color:white;text-align:left;width:25%">COBERTURA</th>
+        ${labels.map((l,i)=>`<th style="padding:12px 8px;font-size:12px;font-weight:600;color:white;text-align:center;width:18.75%;border-left:1px solid rgba(255,255,255,.1)">
           <div style="color:${CORES[i].light}">${esc(l)}</div>
           ${segs[i].plano?`<div style="font-size:10px;color:var(--gray-400);font-weight:400">${esc(segs[i].plano)}</div>`:''}
         </th>`).join('')}
       </tr>
     </thead>
     <tbody>${rows}</tbody>
-    <tfoot><tr style="background:var(--gray-100)">
-      <td style="padding:9px 14px;font-size:12px;font-weight:700;color:var(--gray-700);text-transform:uppercase">${extraLabel}</td>${extraRow}
-    </tr></tfoot>
+    <tfoot>
+      ${carencias ? `<tr style="background:var(--gray-50)">
+        <td style="padding:9px 14px;font-size:12px;font-weight:700;color:var(--gray-700);text-transform:uppercase">⏳ Período de Carência</td>${carencias}
+      </tr>` : ''}
+      ${copagsFora ? `<tr style="background:var(--gray-100)">
+        <td style="padding:9px 14px;font-size:12px;font-weight:700;color:var(--gray-700);text-transform:uppercase">🌐 Co-pag. Fora da Rede</td>${copagsFora}
+      </tr>` : ''}
+      <tr style="background:var(--gray-100)">
+        <td style="padding:9px 14px;font-size:12px;font-weight:700;color:var(--gray-700);text-transform:uppercase">💰 ${extraLabel}</td>${extraRow}
+      </tr>
+    </tfoot>
   </table>`;
 }
 
@@ -569,7 +655,7 @@ function updateIAScores(elId, scores, segs, isAuto=false) {
       <div style="height:7px;border-radius:4px;background:var(--gray-200);overflow:hidden;margin-bottom:8px">
         <div style="height:100%;border-radius:4px;background:${cor.primary};width:${pct}%;transition:width .5s"></div>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;font-size:11px">
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;font-size:11px">
         ${dims.map(([l,v])=>`<div style="text-align:center;background:var(--gray-50);border-radius:4px;padding:4px">
           <div style="color:var(--gray-500)">${l}</div><div style="font-weight:700;color:var(--gray-800)">${v}/10</div></div>`).join('')}
       </div>
@@ -628,14 +714,405 @@ function updateRecomendacao(elId, scores, segs, premioFn) {
 }
 
 /* ══════════════════════════════════════════════════════════════
+   MULTIRISCO
+══════════════════════════════════════════════════════════════ */
+function buildMultiLayout(segList) {
+  return `
+  <div class="card" style="margin-bottom:16px;border-top:3px solid #1a56db">
+    <div class="card-body" style="padding:12px 16px;display:flex;align-items:center;gap:16px">
+      <span style="font-size:20px">👤</span>
+      <div style="flex:1">
+        <label style="font-size:11px;font-weight:700;color:var(--gray-600);text-transform:uppercase;display:block;margin-bottom:3px">Nome do Cliente</label>
+        <input type="text" class="form-control" id="m-cliente" placeholder="Nome completo do cliente ou empresa" value="${esc(state.multi.cliente)}" style="font-size:13px;max-width:480px">
+      </div>
+    </div>
+  </div>
+  <div class="card" style="margin-bottom:16px;border-top:3px solid #f59e0b">
+    <div class="card-header" style="background:#fef3c7;padding:12px 16px">
+      <span class="card-title" style="color:#92400e;font-size:13px;font-weight:700">🏠 DADOS DO IMÓVEL / RISCO</span>
+    </div>
+    <div class="card-body" style="padding:14px">
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px">
+        <div><label style="font-size:11px;font-weight:600;color:var(--gray-600);text-transform:uppercase;display:block;margin-bottom:3px">Tipo de Imóvel</label>
+          <select class="form-control" id="m-tipo" style="font-size:12px">
+            <option value="">Seleccionar...</option>
+            ${TIPOS_IMOVEL.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join('')}
+          </select></div>
+        <div><label style="font-size:11px;font-weight:600;color:var(--gray-600);text-transform:uppercase;display:block;margin-bottom:3px">Localização</label>
+          <input type="text" class="form-control" id="m-local" placeholder="Ex: Luanda" style="font-size:12px"></div>
+        <div><label style="font-size:11px;font-weight:600;color:var(--gray-600);text-transform:uppercase;display:block;margin-bottom:3px">Área (m²)</label>
+          <input type="number" class="form-control" id="m-area" placeholder="0" style="font-size:12px"></div>
+        <div><label style="font-size:11px;font-weight:600;color:var(--gray-600);text-transform:uppercase;display:block;margin-bottom:3px">Valor Imóvel (AOA)</label>
+          <input type="number" class="form-control" id="m-val-imovel" placeholder="0" style="font-size:12px"></div>
+        <div><label style="font-size:11px;font-weight:600;color:var(--gray-600);text-transform:uppercase;display:block;margin-bottom:3px">Valor Recheio (AOA)</label>
+          <input type="number" class="form-control" id="m-val-recheio" placeholder="0" style="font-size:12px"></div>
+      </div>
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px" id="seg-cards-multi">
+    ${[0,1,2,3].map(i => buildSegCardMulti(i, segList)).join('')}
+  </div>
+  <div class="card" style="margin-bottom:24px">
+    <div class="card-header" style="background:var(--gray-900);color:white;border-radius:8px 8px 0 0">
+      <span class="card-title" style="color:white;font-size:14px;font-weight:700">📋 Tabela Comparativa</span>
+    </div>
+    <div class="card-body" style="padding:0;overflow-x:auto"><div id="tabela-multi"></div></div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px">
+    <div class="card"><div class="card-header"><span class="card-title">🧠 Avaliação IA</span></div><div class="card-body" id="ia-scores-multi"></div></div>
+    <div class="card"><div class="card-header"><span class="card-title">📡 Radar de Cobertura</span></div>
+      <div class="card-body" style="position:relative;height:300px"><canvas id="radar-multi"></canvas></div></div>
+  </div>
+  <div id="recomendacao-multi" style="margin-bottom:24px"></div>`;
+}
+
+function buildSegCardMulti(i, segList) {
+  const cor = CORES[i];
+  return `
+<div class="card" style="border-top:3px solid ${cor.primary};min-width:0">
+  <div class="card-header" style="background:${cor.light};padding:12px 16px">
+    <div style="font-size:12px;font-weight:700;color:${cor.primary};text-transform:uppercase;letter-spacing:.5px">Seguradora ${i+1}</div>
+  </div>
+  <div class="card-body" style="padding:14px">
+    <datalist id="sl-m-${i}">${segList.map(s=>`<option value="${esc(s)}">`).join('')}</datalist>
+    <div style="margin-bottom:10px">
+      <label style="font-size:11px;font-weight:600;color:var(--gray-600);text-transform:uppercase;display:block;margin-bottom:3px">Seguradora</label>
+      <input type="text" class="form-control" id="m-nome-${i}" list="sl-m-${i}" placeholder="Nome" style="font-size:13px">
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+      <div><label style="font-size:11px;font-weight:600;color:var(--gray-600);text-transform:uppercase;display:block;margin-bottom:3px">Plano / Produto</label>
+        <input type="text" class="form-control" id="m-plano-${i}" placeholder="Ex: Multi Total" style="font-size:12px"></div>
+      <div><label style="font-size:11px;font-weight:600;color:var(--gray-600);text-transform:uppercase;display:block;margin-bottom:3px">Franquia (AOA)</label>
+        <input type="number" class="form-control" id="m-franquia-${i}" placeholder="0" style="font-size:12px"></div>
+    </div>
+    <div style="background:${cor.light};border-radius:6px;padding:10px;margin-bottom:10px">
+      <div style="font-size:11px;font-weight:700;color:${cor.primary};text-transform:uppercase;margin-bottom:8px">💰 PRÉMIOS</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        ${[['m-p-anual-'+i,'Prémio Anual'],['m-p-semestral-'+i,'Prémio Semestral'],['m-p-trimestral-'+i,'Prémio Trimestral']].map(([id,lbl])=>`
+        <div><label style="font-size:10px;font-weight:600;color:var(--gray-600);display:block;margin-bottom:2px">${lbl} (AOA)</label>
+          <input type="number" class="form-control" id="${id}" placeholder="0" style="font-size:12px;padding:4px 8px;height:30px"></div>`).join('')}
+      </div>
+    </div>
+    <div style="font-size:11px;font-weight:700;color:var(--gray-700);text-transform:uppercase;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid var(--gray-200)">Coberturas Incluídas</div>
+    ${COBERTURAS_MULTI.map(c => `
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;padding:5px 7px;border-radius:5px;background:${c.obrig?'#fef3c7':'var(--gray-50)'}">
+      <input type="checkbox" id="m-${i}-${c.id}-inc" ${c.obrig?'checked disabled':''} style="accent-color:${cor.primary};width:14px;height:14px;flex-shrink:0">
+      <span style="font-size:12px;color:var(--gray-700);flex:1">${c.icon} ${esc(c.label)}${c.obrig?' <span style="font-size:10px;color:#92400e">(obrigatória)</span>':''}</span>
+    </div>`).join('')}
+  </div>
+</div>`;
+}
+
+function bindMultiEvents(segList) {
+  document.getElementById('m-cliente')?.addEventListener('input', e => { state.multi.cliente = e.target.value; });
+  ['m-tipo','m-local','m-area','m-val-imovel','m-val-recheio'].forEach(id =>
+    document.getElementById(id)?.addEventListener('input', () => { readImovel(); updateMulti(); }));
+  [0,1,2,3].forEach(i => {
+    [`m-nome-${i}`,'m-plano-'+i,'m-franquia-'+i,'m-p-anual-'+i,'m-p-semestral-'+i,'m-p-trimestral-'+i].forEach(id =>
+      document.getElementById(id)?.addEventListener('input', () => { readSegMulti(i); updateMulti(); }));
+    COBERTURAS_MULTI.forEach(c => {
+      const el = document.getElementById(`m-${i}-${c.id}-inc`);
+      if (el && !c.obrig) el.addEventListener('change', () => { readSegMulti(i); updateMulti(); });
+    });
+  });
+}
+
+function readImovel() {
+  state.multi.imovel = { tipo: v('m-tipo'), localizacao: v('m-local'), area: v('m-area'),
+    valor_imovel: parseFloat(v('m-val-imovel'))||0, valor_recheio: parseFloat(v('m-val-recheio'))||0 };
+}
+
+function readSegMulti(i) {
+  const s = state.multi.segs[i];
+  s.nome             = v(`m-nome-${i}`);
+  s.plano            = v(`m-plano-${i}`);
+  s.franquia         = parseFloat(v(`m-franquia-${i}`))||0;
+  s.premio_anual     = parseFloat(v(`m-p-anual-${i}`))||0;
+  s.premio_semestral = parseFloat(v(`m-p-semestral-${i}`))||0;
+  s.premio_trimestral= parseFloat(v(`m-p-trimestral-${i}`))||0;
+  COBERTURAS_MULTI.forEach(c => { s.coberturas[c.id].incluida = c.obrig || chk(`m-${i}-${c.id}-inc`); });
+}
+
+function updateMulti() {
+  updateTabelaMulti();
+  const scores = calcScoresMulti();
+  updateIAScores('ia-scores-multi', scores, state.multi.segs, 'multi');
+  updateRadar('radar-multi', scores, state.multi,
+    ['Cobertura','Prémio','Franquia','RC','Furto/Roubo','Assistência'],
+    s => [s.dims.cobertura, s.dims.premio, s.dims.franquia, s.dims.rc, s.dims.furto, s.dims.assistencia]);
+  updateRecomendacao('recomendacao-multi', scores, state.multi.segs, s => s.premio_anual);
+}
+
+function updateTabelaMulti() {
+  const segs   = state.multi.segs;
+  const imovel = state.multi.imovel;
+  const labels = segs.map((s,i) => s.nome || `Seguradora ${i+1}`);
+  const cobRows = COBERTURAS_MULTI.map(c => {
+    const cells = segs.map((s,i) => {
+      const inc = s.coberturas[c.id]?.incluida;
+      return `<td style="text-align:center;${inc?`background:${CORES[i].light}`:''}">
+        <span style="font-size:15px;font-weight:700;color:${inc?CORES[i].primary:'var(--gray-300)'}">${inc?'✓':'—'}</span></td>`;
+    }).join('');
+    return `<tr style="border-bottom:1px solid var(--gray-100)"><td style="padding:7px 14px;font-size:13px;font-weight:500">${c.icon} ${c.label}</td>${cells}</tr>`;
+  }).join('');
+  const premioRows = [
+    ['Prémio Anual', s=>s.premio_anual], ['Prémio Semestral', s=>s.premio_semestral],
+    ['Prémio Trimestral', s=>s.premio_trimestral], ['Franquia', s=>s.franquia],
+  ].map(([lbl,fn]) => {
+    const cells = segs.map((s,i) => {
+      const val = fn(s);
+      if (!val) return `<td style="text-align:center;color:var(--gray-400)">—</td>`;
+      return `<td style="text-align:center;background:${CORES[i].light};padding:7px"><span style="font-size:12px;font-weight:700;color:${CORES[i].primary}">${fmtN(val)} AOA</span></td>`;
+    }).join('');
+    return `<tr style="border-bottom:1px solid var(--gray-100)"><td style="padding:7px 14px;font-size:13px;font-weight:600;color:var(--gray-700)">${lbl}</td>${cells}</tr>`;
+  }).join('');
+  const imovelInfo = imovel.tipo ? `🏠 ${esc(imovel.tipo)}${imovel.localizacao?' · '+esc(imovel.localizacao):''}${imovel.area?' · '+imovel.area+'m²':''}` : 'COBERTURA / PRÉMIO';
+  document.getElementById('tabela-multi').innerHTML = `
+  <table style="width:100%;border-collapse:collapse">
+    <thead>
+      <tr style="background:var(--gray-800)">
+        <th style="padding:10px 14px;font-size:12px;font-weight:600;color:white;text-align:left;width:30%">${imovelInfo}</th>
+        ${labels.map((l,i)=>`<th style="padding:10px 8px;font-size:12px;font-weight:600;color:white;text-align:center;border-left:1px solid rgba(255,255,255,.1)">
+          <div style="color:${CORES[i].light}">${esc(l)}</div>
+          ${segs[i].plano?`<div style="font-size:10px;color:var(--gray-400);font-weight:400">${esc(segs[i].plano)}</div>`:''}
+        </th>`).join('')}
+      </tr>
+      <tr style="background:#374151"><td colspan="4" style="padding:6px 14px;font-size:11px;font-weight:700;color:var(--gray-300);text-transform:uppercase;letter-spacing:.5px">Coberturas</td></tr>
+    </thead>
+    <tbody>${cobRows}
+      <tr style="background:#374151"><td colspan="4" style="padding:6px 14px;font-size:11px;font-weight:700;color:var(--gray-300);text-transform:uppercase;letter-spacing:.5px">Prémios & Condições</td></tr>
+      ${premioRows}
+    </tbody>
+  </table>`;
+}
+
+function calcScoresMulti() {
+  const segs = state.multi.segs;
+  const anual = segs.map(s => s.premio_anual||0);
+  const maxA  = Math.max(...anual.filter(p=>p>0))||1;
+  const minA  = Math.min(...anual.filter(p=>p>0))||1;
+  const maxF  = Math.max(...segs.map(s=>s.franquia||0))||1;
+  const totalPeso = COBERTURAS_MULTI.reduce((a,c)=>a+c.peso,0);
+  return segs.map((s,i) => {
+    const pesoInc = COBERTURAS_MULTI.reduce((a,c)=>a+(s.coberturas[c.id]?.incluida?c.peso:0),0);
+    const cobScore = pesoInc/totalPeso*40;
+    let premioScore = 15;
+    if (s.premio_anual>0 && anual.filter(p=>p>0).length>1) premioScore = ((maxA-s.premio_anual)/(maxA-minA||1))*35;
+    else if (s.premio_anual>0) premioScore = 20;
+    const franquiaScore = s.franquia>0 ? Math.max(0,15-(s.franquia/maxF)*15) : 15;
+    const total = Math.min(100, Math.round(cobScore+premioScore+franquiaScore));
+    return { idx:i, nome:s.nome||`Seguradora ${i+1}`, total,
+      dims:{ cobertura:+(pesoInc/totalPeso*10).toFixed(1), premio:+(premioScore/35*10).toFixed(1), franquia:+(franquiaScore/15*10).toFixed(1),
+             rc:s.coberturas['rc']?.incluida?10:0, furto:s.coberturas['furto_van']?.incluida?10:0, assistencia:s.coberturas['assist_24h']?.incluida?10:0 } };
+  });
+}
+
+/* ══════════════════════════════════════════════════════════════
+   ACIDENTE DE TRABALHO
+══════════════════════════════════════════════════════════════ */
+function buildATLayout(segList) {
+  return `
+  <div class="card" style="margin-bottom:16px;border-top:3px solid #1a56db">
+    <div class="card-body" style="padding:12px 16px;display:flex;align-items:center;gap:16px">
+      <span style="font-size:20px">👤</span>
+      <div style="flex:1">
+        <label style="font-size:11px;font-weight:700;color:var(--gray-600);text-transform:uppercase;display:block;margin-bottom:3px">Nome do Cliente / Empresa</label>
+        <input type="text" class="form-control" id="at-cliente" placeholder="Nome da empresa segurada" value="${esc(state.at.cliente)}" style="font-size:13px;max-width:480px">
+      </div>
+    </div>
+  </div>
+  <div class="card" style="margin-bottom:16px;border-top:3px solid #f59e0b">
+    <div class="card-header" style="background:#fef3c7;padding:12px 16px">
+      <span class="card-title" style="color:#92400e;font-size:13px;font-weight:700">👷 DADOS DA EMPRESA / RISCO</span>
+    </div>
+    <div class="card-body" style="padding:14px">
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
+        <div><label style="font-size:11px;font-weight:600;color:var(--gray-600);text-transform:uppercase;display:block;margin-bottom:3px">Sector de Actividade</label>
+          <select class="form-control" id="at-sector" style="font-size:12px">
+            <option value="">Seleccionar...</option>
+            ${SECTORES_AT.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join('')}
+          </select></div>
+        <div><label style="font-size:11px;font-weight:600;color:var(--gray-600);text-transform:uppercase;display:block;margin-bottom:3px">Nº de Trabalhadores</label>
+          <input type="number" class="form-control" id="at-num-trab" placeholder="0" style="font-size:12px"></div>
+        <div><label style="font-size:11px;font-weight:600;color:var(--gray-600);text-transform:uppercase;display:block;margin-bottom:3px">Capital / Trabalhador (AOA)</label>
+          <input type="number" class="form-control" id="at-capital-trab" placeholder="0" style="font-size:12px"></div>
+      </div>
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px" id="seg-cards-at">
+    ${[0,1,2,3].map(i => buildSegCardAT(i, segList)).join('')}
+  </div>
+  <div class="card" style="margin-bottom:24px">
+    <div class="card-header" style="background:var(--gray-900);color:white;border-radius:8px 8px 0 0">
+      <span class="card-title" style="color:white;font-size:14px;font-weight:700">📋 Tabela Comparativa</span>
+    </div>
+    <div class="card-body" style="padding:0;overflow-x:auto"><div id="tabela-at"></div></div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px">
+    <div class="card"><div class="card-header"><span class="card-title">🧠 Avaliação IA</span></div><div class="card-body" id="ia-scores-at"></div></div>
+    <div class="card"><div class="card-header"><span class="card-title">📡 Radar de Cobertura</span></div>
+      <div class="card-body" style="position:relative;height:300px"><canvas id="radar-at"></canvas></div></div>
+  </div>
+  <div id="recomendacao-at" style="margin-bottom:24px"></div>`;
+}
+
+function buildSegCardAT(i, segList) {
+  const cor = CORES[i];
+  return `
+<div class="card" style="border-top:3px solid ${cor.primary};min-width:0">
+  <div class="card-header" style="background:${cor.light};padding:12px 16px">
+    <div style="font-size:12px;font-weight:700;color:${cor.primary};text-transform:uppercase;letter-spacing:.5px">Seguradora ${i+1}</div>
+  </div>
+  <div class="card-body" style="padding:14px">
+    <datalist id="sl-at-${i}">${segList.map(s=>`<option value="${esc(s)}">`).join('')}</datalist>
+    <div style="margin-bottom:10px">
+      <label style="font-size:11px;font-weight:600;color:var(--gray-600);text-transform:uppercase;display:block;margin-bottom:3px">Seguradora</label>
+      <input type="text" class="form-control" id="at-nome-${i}" list="sl-at-${i}" placeholder="Nome" style="font-size:13px">
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+      <div><label style="font-size:11px;font-weight:600;color:var(--gray-600);text-transform:uppercase;display:block;margin-bottom:3px">Plano / Produto</label>
+        <input type="text" class="form-control" id="at-plano-${i}" placeholder="Ex: AT Completo" style="font-size:12px"></div>
+      <div><label style="font-size:11px;font-weight:600;color:var(--gray-600);text-transform:uppercase;display:block;margin-bottom:3px">Capital por Morte (AOA)</label>
+        <input type="number" class="form-control" id="at-capital-${i}" placeholder="0" style="font-size:12px"></div>
+    </div>
+    <div style="background:${cor.light};border-radius:6px;padding:10px;margin-bottom:10px">
+      <div style="font-size:11px;font-weight:700;color:${cor.primary};text-transform:uppercase;margin-bottom:8px">💰 PRÉMIOS</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        ${[['at-p-anual-'+i,'Prémio Anual'],['at-p-semestral-'+i,'Prémio Semestral'],['at-p-trimestral-'+i,'Prémio Trimestral']].map(([id,lbl])=>`
+        <div><label style="font-size:10px;font-weight:600;color:var(--gray-600);display:block;margin-bottom:2px">${lbl} (AOA)</label>
+          <input type="number" class="form-control" id="${id}" placeholder="0" style="font-size:12px;padding:4px 8px;height:30px"></div>`).join('')}
+      </div>
+    </div>
+    <div style="font-size:11px;font-weight:700;color:var(--gray-700);text-transform:uppercase;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid var(--gray-200)">Coberturas Incluídas</div>
+    ${COBERTURAS_AT.map(c => `
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;padding:5px 7px;border-radius:5px;background:${c.obrig?'#fef3c7':'var(--gray-50)'}">
+      <input type="checkbox" id="at-${i}-${c.id}-inc" ${c.obrig?'checked disabled':''} style="accent-color:${cor.primary};width:14px;height:14px;flex-shrink:0">
+      <span style="font-size:12px;color:var(--gray-700);flex:1">${c.icon} ${esc(c.label)}${c.obrig?' <span style="font-size:10px;color:#92400e">(obrigatória)</span>':''}</span>
+    </div>`).join('')}
+  </div>
+</div>`;
+}
+
+function bindATEvents(segList) {
+  document.getElementById('at-cliente')?.addEventListener('input', e => { state.at.cliente = e.target.value; });
+  ['at-sector','at-num-trab','at-capital-trab'].forEach(id =>
+    document.getElementById(id)?.addEventListener('input', () => { readEmpresa(); updateAT(); }));
+  [0,1,2,3].forEach(i => {
+    [`at-nome-${i}`,'at-plano-'+i,'at-capital-'+i,'at-p-anual-'+i,'at-p-semestral-'+i,'at-p-trimestral-'+i].forEach(id =>
+      document.getElementById(id)?.addEventListener('input', () => { readSegAT(i); updateAT(); }));
+    COBERTURAS_AT.forEach(c => {
+      const el = document.getElementById(`at-${i}-${c.id}-inc`);
+      if (el && !c.obrig) el.addEventListener('change', () => { readSegAT(i); updateAT(); });
+    });
+  });
+}
+
+function readEmpresa() {
+  state.at.empresa = { sector: v('at-sector'), num_trabalhadores: v('at-num-trab'), capital_por_trabalhador: parseFloat(v('at-capital-trab'))||0 };
+}
+
+function readSegAT(i) {
+  const s = state.at.segs[i];
+  s.nome              = v(`at-nome-${i}`);
+  s.plano             = v(`at-plano-${i}`);
+  s.capital_morte     = parseFloat(v(`at-capital-${i}`))||0;
+  s.premio_anual      = parseFloat(v(`at-p-anual-${i}`))||0;
+  s.premio_semestral  = parseFloat(v(`at-p-semestral-${i}`))||0;
+  s.premio_trimestral = parseFloat(v(`at-p-trimestral-${i}`))||0;
+  COBERTURAS_AT.forEach(c => { s.coberturas[c.id].incluida = c.obrig || chk(`at-${i}-${c.id}-inc`); });
+}
+
+function updateAT() {
+  updateTabelaAT();
+  const scores = calcScoresAT();
+  updateIAScores('ia-scores-at', scores, state.at.segs, 'at');
+  updateRadar('radar-at', scores, state.at,
+    ['Cobertura','Prémio','Capital','Desp. Médicas','Reabilitação','Invalidez'],
+    s => [s.dims.cobertura, s.dims.premio, s.dims.capital, s.dims.desp_med, s.dims.reab, s.dims.inval]);
+  updateRecomendacao('recomendacao-at', scores, state.at.segs, s => s.premio_anual);
+}
+
+function updateTabelaAT() {
+  const segs    = state.at.segs;
+  const empresa = state.at.empresa;
+  const labels  = segs.map((s,i) => s.nome || `Seguradora ${i+1}`);
+  const cobRows = COBERTURAS_AT.map(c => {
+    const cells = segs.map((s,i) => {
+      const inc = s.coberturas[c.id]?.incluida;
+      return `<td style="text-align:center;${inc?`background:${CORES[i].light}`:''}">
+        <span style="font-size:15px;font-weight:700;color:${inc?CORES[i].primary:'var(--gray-300)'}">${inc?'✓':'—'}</span></td>`;
+    }).join('');
+    return `<tr style="border-bottom:1px solid var(--gray-100)"><td style="padding:7px 14px;font-size:13px;font-weight:500">${c.icon} ${c.label}</td>${cells}</tr>`;
+  }).join('');
+  const premioRows = [
+    ['Prémio Anual', s=>s.premio_anual], ['Prémio Semestral', s=>s.premio_semestral],
+    ['Prémio Trimestral', s=>s.premio_trimestral], ['Capital por Morte', s=>s.capital_morte],
+  ].map(([lbl,fn]) => {
+    const cells = segs.map((s,i) => {
+      const val = fn(s);
+      if (!val) return `<td style="text-align:center;color:var(--gray-400)">—</td>`;
+      return `<td style="text-align:center;background:${CORES[i].light};padding:7px"><span style="font-size:12px;font-weight:700;color:${CORES[i].primary}">${fmtN(val)} AOA</span></td>`;
+    }).join('');
+    return `<tr style="border-bottom:1px solid var(--gray-100)"><td style="padding:7px 14px;font-size:13px;font-weight:600;color:var(--gray-700)">${lbl}</td>${cells}</tr>`;
+  }).join('');
+  const empInfo = empresa.sector
+    ? `👷 ${esc(empresa.sector)}${empresa.num_trabalhadores?' · '+empresa.num_trabalhadores+' trabalhadores':''}`
+    : 'COBERTURA / PRÉMIO';
+  document.getElementById('tabela-at').innerHTML = `
+  <table style="width:100%;border-collapse:collapse">
+    <thead>
+      <tr style="background:var(--gray-800)">
+        <th style="padding:10px 14px;font-size:12px;font-weight:600;color:white;text-align:left;width:30%">${empInfo}</th>
+        ${labels.map((l,i)=>`<th style="padding:10px 8px;font-size:12px;font-weight:600;color:white;text-align:center;border-left:1px solid rgba(255,255,255,.1)">
+          <div style="color:${CORES[i].light}">${esc(l)}</div>
+          ${segs[i].plano?`<div style="font-size:10px;color:var(--gray-400);font-weight:400">${esc(segs[i].plano)}</div>`:''}
+        </th>`).join('')}
+      </tr>
+      <tr style="background:#374151"><td colspan="4" style="padding:6px 14px;font-size:11px;font-weight:700;color:var(--gray-300);text-transform:uppercase;letter-spacing:.5px">Coberturas</td></tr>
+    </thead>
+    <tbody>${cobRows}
+      <tr style="background:#374151"><td colspan="4" style="padding:6px 14px;font-size:11px;font-weight:700;color:var(--gray-300);text-transform:uppercase;letter-spacing:.5px">Prémios & Capitais</td></tr>
+      ${premioRows}
+    </tbody>
+  </table>`;
+}
+
+function calcScoresAT() {
+  const segs  = state.at.segs;
+  const anual = segs.map(s => s.premio_anual||0);
+  const maxA  = Math.max(...anual.filter(p=>p>0))||1;
+  const minA  = Math.min(...anual.filter(p=>p>0))||1;
+  const maxC  = Math.max(...segs.map(s=>s.capital_morte||0))||1;
+  const totalPeso = COBERTURAS_AT.reduce((a,c)=>a+c.peso,0);
+  return segs.map((s,i) => {
+    const pesoInc = COBERTURAS_AT.reduce((a,c)=>a+(s.coberturas[c.id]?.incluida?c.peso:0),0);
+    const cobScore = pesoInc/totalPeso*45;
+    let premioScore = 15;
+    if (s.premio_anual>0 && anual.filter(p=>p>0).length>1) premioScore = ((maxA-s.premio_anual)/(maxA-minA||1))*35;
+    else if (s.premio_anual>0) premioScore = 20;
+    const capScore = s.capital_morte>0 ? Math.min(20,(s.capital_morte/maxC)*20) : 0;
+    const total = Math.min(100, Math.round(cobScore+premioScore+capScore));
+    return { idx:i, nome:s.nome||`Seguradora ${i+1}`, total,
+      dims:{ cobertura:+(pesoInc/totalPeso*10).toFixed(1), premio:+(premioScore/35*10).toFixed(1), capital:+(capScore/20*10).toFixed(1),
+             desp_med:s.coberturas['desp_medicas']?.incluida?10:0, reab:s.coberturas['reabilitacao']?.incluida?10:0, inval:s.coberturas['ipp']?.incluida?10:0 } };
+  });
+}
+
+/* ══════════════════════════════════════════════════════════════
    LIMPAR
 ══════════════════════════════════════════════════════════════ */
 function limpar(segList) {
   if (state.tab==='saude') {
-    state.saude.segs = [0,1,2].map(()=>newSegSaude());
-  } else {
-    state.auto.segs = [0,1,2].map(()=>newSegAuto());
+    state.saude.segs = [0,1,2,3].map(()=>newSegSaude());
+  } else if (state.tab==='auto') {
+    state.auto.segs = [0,1,2,3].map(()=>newSegAuto());
     state.auto.veiculo = {};
+  } else if (state.tab==='multi') {
+    state.multi.segs = [0,1,2,3].map(()=>newSegMulti());
+    state.multi.imovel = {};
+  } else {
+    state.at.segs = [0,1,2,3].map(()=>newSegAT());
+    state.at.empresa = {};
   }
   renderTab(segList);
 }
@@ -646,7 +1123,10 @@ function limpar(segList) {
 function gerarPDF() {
   const btn = document.getElementById('btn-pdf');
   btn.disabled = true; btn.textContent = '⏳ A gerar...';
-  const html = state.tab === 'saude' ? buildPDFSaude() : buildPDFAuto();
+  const html = state.tab === 'saude' ? buildPDFSaude()
+             : state.tab === 'auto'  ? buildPDFAuto()
+             : state.tab === 'multi' ? buildPDFMulti()
+             : buildPDFAT();
   const w = window.open('', '_blank', 'width=900,height=700');
   w.document.write(html); w.document.close();
   setTimeout(() => { w.focus(); w.print(); btn.disabled=false; btn.innerHTML='📄 PDF'; }, 600);
@@ -791,6 +1271,80 @@ function buildPDFAuto() {
   </body></html>`;
 }
 
+function buildPDFMulti() {
+  const segs   = state.multi.segs;
+  const imovel = state.multi.imovel;
+  const scores = calcScoresMulti();
+  const sorted = [...scores].sort((a,b)=>b.total-a.total);
+  const cobRows = COBERTURAS_MULTI.map(c => {
+    const cells = segs.map((s,i) => {
+      const inc = s.coberturas[c.id]?.incluida;
+      return `<td style="text-align:center;${inc?`background:${CORES[i].light}`:'color:#9ca3af'}">${inc?'✓':'—'}</td>`;
+    }).join('');
+    return `<tr><td>${c.icon} ${c.label}${c.obrig?' <small style="color:#dc2626">*</small>':''}</td>${cells}</tr>`;
+  }).join('');
+  const premRows = [['Prémio Anual',s=>s.premio_anual],['Prémio Semestral',s=>s.premio_semestral],['Prémio Trimestral',s=>s.premio_trimestral],['Franquia',s=>s.franquia]].map(([l,fn])=>{
+    const cells = segs.map(s=>`<td style="text-align:center;font-weight:600">${fn(s)?fmtN(fn(s))+' AOA':'—'}</td>`).join('');
+    return `<tr><td style="font-weight:700">${l}</td>${cells}</tr>`;
+  }).join('');
+  const imovelInfo = [imovel.tipo, imovel.localizacao, imovel.area?imovel.area+'m²':''].filter(Boolean).join(' · ');
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Comparativo Multirisco — ELOVITAL</title>${pdfStyle()}</head><body>
+  ${pdfHeader(state.multi.cliente)}
+  <div class="pdf-title-bar">
+    <div>
+      <h2>🏠 Mapa Comparativo — Seguro Multirisco</h2>
+      ${imovelInfo?`<div style="font-size:9px;color:#6b7280;margin-top:2px">${esc(imovelInfo)}${imovel.valor_imovel?' · Imóvel: '+fmtN(imovel.valor_imovel)+' AOA':''}</div>`:''}
+    </div>
+    <span class="pdf-date">Emitido em ${new Date().toLocaleDateString('pt-AO')}</span>
+  </div>
+  <h3>Coberturas & Prémios</h3>
+  <table><thead><tr><th>COBERTURA / PRÉMIO</th>${segs.map((s,i)=>`<th style="background:${CORES[i].primary}">${esc(s.nome||`Seg. ${i+1}`)}${s.plano?` · ${esc(s.plano)}`:''}</th>`).join('')}</tr></thead>
+  <tbody>${cobRows}${premRows}</tbody></table>
+  <h3>Avaliação IA</h3>
+  <table><thead><tr><th>Seguradora</th><th style="text-align:center">Cobertura</th><th style="text-align:center">Prémio</th><th style="text-align:center">Franquia</th><th style="text-align:center">Score</th></tr></thead>
+  <tbody>${scores.map((sc,i)=>{const r=sorted.findIndex(s=>s.idx===i);return`<tr><td>${MEDAL[r]} <strong>${esc(sc.nome)}</strong></td><td style="text-align:center">${sc.dims.cobertura}/10</td><td style="text-align:center">${sc.dims.premio}/10</td><td style="text-align:center">${sc.dims.franquia}/10</td><td style="text-align:center;font-weight:800;color:${CORES[i].primary}">${sc.total}/100</td></tr>`;}).join('')}</tbody></table>
+  <div class="rec">🏆 <strong>Recomendação IA:</strong> <strong>${esc(sorted[0].nome)}</strong> — Score <strong>${sorted[0].total}/100</strong>.</div>
+  ${pdfFooter()}
+  </body></html>`;
+}
+
+function buildPDFAT() {
+  const segs   = state.at.segs;
+  const emp    = state.at.empresa;
+  const scores = calcScoresAT();
+  const sorted = [...scores].sort((a,b)=>b.total-a.total);
+  const cobRows = COBERTURAS_AT.map(c => {
+    const cells = segs.map((s,i) => {
+      const inc = s.coberturas[c.id]?.incluida;
+      return `<td style="text-align:center;${inc?`background:${CORES[i].light}`:'color:#9ca3af'}">${inc?'✓':'—'}</td>`;
+    }).join('');
+    return `<tr><td>${c.icon} ${c.label}${c.obrig?' <small style="color:#dc2626">*</small>':''}</td>${cells}</tr>`;
+  }).join('');
+  const premRows = [['Prémio Anual',s=>s.premio_anual],['Prémio Semestral',s=>s.premio_semestral],['Prémio Trimestral',s=>s.premio_trimestral],['Capital Morte/Invalidez',s=>s.capital_morte]].map(([l,fn])=>{
+    const cells = segs.map(s=>`<td style="text-align:center;font-weight:600">${fn(s)?fmtN(fn(s))+' AOA':'—'}</td>`).join('');
+    return `<tr><td style="font-weight:700">${l}</td>${cells}</tr>`;
+  }).join('');
+  const empInfo = [emp.sector, emp.num_trabalhadores?emp.num_trabalhadores+' trabalhadores':''].filter(Boolean).join(' · ');
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Comparativo Acidente de Trabalho — ELOVITAL</title>${pdfStyle()}</head><body>
+  ${pdfHeader(state.at.cliente)}
+  <div class="pdf-title-bar">
+    <div>
+      <h2>👷 Mapa Comparativo — Seguro de Acidente de Trabalho</h2>
+      ${empInfo?`<div style="font-size:9px;color:#6b7280;margin-top:2px">${esc(empInfo)}${emp.capital_por_trabalhador?' · Capital/Trab: '+fmtN(emp.capital_por_trabalhador)+' AOA':''}</div>`:''}
+    </div>
+    <span class="pdf-date">Emitido em ${new Date().toLocaleDateString('pt-AO')}</span>
+  </div>
+  <h3>Coberturas & Prémios</h3>
+  <table><thead><tr><th>COBERTURA / PRÉMIO</th>${segs.map((s,i)=>`<th style="background:${CORES[i].primary}">${esc(s.nome||`Seg. ${i+1}`)}${s.plano?` · ${esc(s.plano)}`:''}</th>`).join('')}</tr></thead>
+  <tbody>${cobRows}${premRows}</tbody></table>
+  <h3>Avaliação IA</h3>
+  <table><thead><tr><th>Seguradora</th><th style="text-align:center">Cobertura</th><th style="text-align:center">Prémio</th><th style="text-align:center">Capital</th><th style="text-align:center">Score</th></tr></thead>
+  <tbody>${scores.map((sc,i)=>{const r=sorted.findIndex(s=>s.idx===i);return`<tr><td>${MEDAL[r]} <strong>${esc(sc.nome)}</strong></td><td style="text-align:center">${sc.dims.cobertura}/10</td><td style="text-align:center">${sc.dims.premio}/10</td><td style="text-align:center">${sc.dims.capital}/10</td><td style="text-align:center;font-weight:800;color:${CORES[i].primary}">${sc.total}/100</td></tr>`;}).join('')}</tbody></table>
+  <div class="rec">🏆 <strong>Recomendação IA:</strong> <strong>${esc(sorted[0].nome)}</strong> — Score <strong>${sorted[0].total}/100</strong>.</div>
+  ${pdfFooter()}
+  </body></html>`;
+}
+
 /* ══════════════════════════════════════════════════════════════
    EMAIL
 ══════════════════════════════════════════════════════════════ */
@@ -801,18 +1355,40 @@ async function enviarEmail() {
   const btn = document.getElementById('modal-send');
   btn.disabled=true; btn.textContent='⏳ A enviar...';
   try {
-    const isSaude = state.tab === 'saude';
-    const html    = isSaude ? buildPDFSaude() : buildPDFAuto();
-    const tipo    = isSaude ? 'Seguro de Saúde' : 'Seguro Automóvel';
-    const segs    = (isSaude ? state.saude.segs : state.auto.segs)
-                    .map((s,i) => ({ nome: s.nome||`Seguradora ${i+1}`, plano: s.plano, premio: s.premio_anual||s.premio||0 }));
-    const veic    = state.auto.veiculo;
-    const veicInfo = isSaude ? '' : [veic.tipo_cobertura, veic.marca, veic.modelo, veic.ano].filter(Boolean).join(' ');
+    const tab = state.tab;
+    let html, tipo, segs, cliente, veiculo_info = '';
+    if (tab === 'saude') {
+      html    = buildPDFSaude();
+      tipo    = 'Seguro de Saúde';
+      segs    = state.saude.segs.map((s,i)=>({ nome: s.nome||`Seguradora ${i+1}`, plano: s.plano, premio: s.premio||0 }));
+      cliente = state.saude.cliente;
+    } else if (tab === 'auto') {
+      html    = buildPDFAuto();
+      tipo    = 'Seguro Automóvel';
+      segs    = state.auto.segs.map((s,i)=>({ nome: s.nome||`Seguradora ${i+1}`, plano: s.plano, premio: s.premio_anual||0 }));
+      cliente = state.auto.cliente;
+      const v = state.auto.veiculo;
+      veiculo_info = [v.tipo_cobertura, v.marca, v.modelo, v.ano].filter(Boolean).join(' ');
+    } else if (tab === 'multi') {
+      html    = buildPDFMulti();
+      tipo    = 'Seguro Multirisco';
+      segs    = state.multi.segs.map((s,i)=>({ nome: s.nome||`Seguradora ${i+1}`, plano: s.plano, premio: s.premio_anual||0 }));
+      cliente = state.multi.cliente;
+      const im = state.multi.imovel;
+      veiculo_info = [im.tipo, im.localizacao].filter(Boolean).join(' · ');
+    } else {
+      html    = buildPDFAT();
+      tipo    = 'Acidente de Trabalho';
+      segs    = state.at.segs.map((s,i)=>({ nome: s.nome||`Seguradora ${i+1}`, plano: s.plano, premio: s.premio_anual||0 }));
+      cliente = state.at.cliente;
+      const em = state.at.empresa;
+      veiculo_info = [em.sector, em.num_trabalhadores?em.num_trabalhadores+' trab.':''].filter(Boolean).join(' · ');
+    }
     await post('/cotacoes/enviar-email', {
       email, mensagem: msg, html_content: html, seguradoras: segs,
-      tipo: state.tab,
-      cliente_nome: isSaude ? state.saude.cliente : state.auto.cliente,
-      veiculo_info: veicInfo,
+      tipo: tab,
+      cliente_nome: cliente,
+      veiculo_info,
     });
     document.getElementById('modal-email').style.display='none';
     showToast(`✅ Email enviado — ${tipo}`, 'success');
@@ -956,7 +1532,8 @@ async function carregarHistorico() {
     tbody.innerHTML = rows.map(r => {
       const segs = (r.seguradoras||[]).filter(Boolean).join(' · ') || '—';
       const data = r.created_at ? r.created_at.slice(0,10).split('-').reverse().join('/') : '—';
-      const tipo = r.tipo === 'saude' ? '<span style="font-size:11px">🏥 Saúde</span>' : '<span style="font-size:11px">🚗 Auto</span>';
+      const tipoLabel = r.tipo === 'saude' ? '🏥 Saúde' : r.tipo === 'auto' ? '🚗 Auto' : r.tipo === 'multi' ? '🏠 Multirisco' : '👷 Ac. Trabalho';
+      const tipo = `<span style="font-size:11px">${tipoLabel}</span>`;
       return `<tr style="border-bottom:1px solid var(--gray-100)" data-id="${r.id}">
         <td style="padding:8px 12px;font-size:12px;font-weight:600;color:var(--primary)">${esc(r.numero)}</td>
         <td style="padding:8px 12px;font-size:12px">${data}</td>
