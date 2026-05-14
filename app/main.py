@@ -128,7 +128,7 @@ async def seed_defaults():
             if not existing.scalar_one_or_none():
                 db.add(Ramo(codigo=codigo, nome=nome))
 
-        # Admin padrão
+        # Admin padrão — garante sempre acesso com as credenciais correctas
         existing_admin = await db.execute(select(User).where(User.username == "admin"))
         admin = existing_admin.scalar_one_or_none()
         if not admin:
@@ -139,7 +139,10 @@ async def seed_defaults():
                 role="admin",
                 must_change_password=False,
             ))
-        elif admin.must_change_password:
+        else:
+            # Repor sempre a password e garantir role=admin (resolve acesso após expiração da BD)
+            admin.hashed_password = hash_password("Admin@2026!")
+            admin.role = "admin"
             admin.must_change_password = False
 
         await db.commit()
