@@ -6,15 +6,156 @@
   <title>SIGMS ELOVITAL — Gestão de Mediação de Seguros</title>
   <link rel="stylesheet" href="/static/css/main.css">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛡️</text></svg>">
+  <style>
+    #wake-screen {
+      position: fixed; inset: 0; z-index: 9999;
+      background: #f0f4ff;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+    #wake-screen .wake-card {
+      background: white;
+      border-radius: 20px;
+      padding: 44px 52px;
+      box-shadow: 0 8px 40px rgba(37,99,235,0.12);
+      text-align: center;
+      max-width: 420px;
+      width: 90%;
+    }
+    #wake-screen .wake-logo {
+      font-size: 52px; margin-bottom: 16px;
+      animation: wpulse 2s ease-in-out infinite;
+    }
+    @keyframes wpulse {
+      0%,100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.08); opacity: 0.85; }
+    }
+    #wake-screen h1 { font-size: 22px; font-weight: 700; color: #1e293b; margin: 0 0 6px; }
+    #wake-screen .wake-sub { font-size: 14px; color: #64748b; margin: 0 0 28px; }
+    #wake-screen .wake-bar-wrap {
+      background: #e2e8f0; border-radius: 8px; height: 8px; margin-bottom: 14px; overflow: hidden;
+    }
+    #wake-screen .wake-bar {
+      height: 100%; border-radius: 8px;
+      background: linear-gradient(90deg, #2563eb, #7c3aed);
+      width: 0%; transition: width 0.6s ease;
+    }
+    #wake-screen .wake-msg { font-size: 13px; color: #94a3b8; }
+    #wake-screen .wake-dots span {
+      display: inline-block; width: 6px; height: 6px;
+      border-radius: 50%; background: #94a3b8; margin: 0 2px;
+      animation: wbounce 1.4s ease-in-out infinite;
+    }
+    #wake-screen .wake-dots span:nth-child(2) { animation-delay: 0.2s; }
+    #wake-screen .wake-dots span:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes wbounce {
+      0%,80%,100% { transform: translateY(0); }
+      40% { transform: translateY(-6px); }
+    }
+  </style>
 </head>
 <body>
+  <!-- Tela de wake-up: visível apenas quando o servidor está a acordar -->
+  <div id="wake-screen">
+    <div class="wake-card">
+      <div class="wake-logo">🛡️</div>
+      <h1>SIGMS ELOVITAL</h1>
+      <p class="wake-sub">Gestão de Mediação de Seguros</p>
+      <div class="wake-bar-wrap"><div class="wake-bar" id="wake-bar"></div></div>
+      <p class="wake-msg" id="wake-msg">O servidor está a iniciar, aguarde
+        <span class="wake-dots"><span></span><span></span><span></span></span>
+      </p>
+    </div>
+  </div>
+
+  <!-- SPA principal -->
   <div id="app">
     <div class="loading" style="min-height:100vh">
       <div class="spinner"></div>
       <span>A carregar SIGMS ELOVITAL...</span>
     </div>
   </div>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-  <script type="module" src="/static/js/app.js?v=2"></script>
+
+  <script>
+    (function () {
+      var MAX_WAIT_MS = 120000;  // 2 minutos máximo
+      var RETRY_MS   = 5000;    // testar a cada 5 segundos
+      var wakeScreen = document.getElementById('wake-screen');
+      var wakeBar    = document.getElementById('wake-bar');
+      var wakeMsg    = document.getElementById('wake-msg');
+      var attempts   = 0;
+      var spaLoaded  = false;
+      var retryTimer = null;
+
+      function checkHealth() {
+        return new Promise(function (resolve) {
+          var xhr = new XMLHttpRequest();
+          var done = false;
+          var tid = setTimeout(function () {
+            if (!done) { done = true; xhr.abort(); resolve(false); }
+          }, 8000);
+          xhr.open('GET', '/health', true);
+          xhr.onload = function () {
+            if (!done) { done = true; clearTimeout(tid); resolve(xhr.status === 200); }
+          };
+          xhr.onerror = function () {
+            if (!done) { done = true; clearTimeout(tid); resolve(false); }
+          };
+          try { xhr.send(); } catch (e) { if (!done) { done = true; clearTimeout(tid); resolve(false); } }
+        });
+      }
+
+      function updateBar() {
+        var pct = Math.min(95, (attempts * RETRY_MS / MAX_WAIT_MS) * 100);
+        wakeBar.style.width = pct + '%';
+        var elapsed = Math.round(attempts * RETRY_MS / 1000);
+        wakeMsg.innerHTML = 'O servidor está a iniciar (' + elapsed + 's)&hellip;&nbsp;'
+          + '<span class="wake-dots"><span></span><span></span><span></span></span>';
+      }
+
+      function loadSPA() {
+        if (spaLoaded) return;
+        spaLoaded = true;
+        wakeBar.style.width = '100%';
+        wakeScreen.style.display = 'none';
+        var chart = document.createElement('script');
+        chart.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js';
+        function loadApp() {
+          var app = document.createElement('script');
+          app.type = 'module';
+          app.src = '/static/js/app.js?v=3';
+          document.body.appendChild(app);
+        }
+        chart.onload  = loadApp;
+        chart.onerror = loadApp;
+        document.body.appendChild(chart);
+      }
+
+      function startRetry() {
+        wakeScreen.style.display = 'flex';
+        retryTimer = setInterval(function () {
+          attempts++;
+          updateBar();
+          if (attempts * RETRY_MS >= MAX_WAIT_MS) {
+            clearInterval(retryTimer);
+            wakeBar.style.background = '#ef4444';
+            wakeBar.style.width = '100%';
+            wakeMsg.textContent = 'O servidor demorou demasiado. Por favor recarregue a página.';
+            return;
+          }
+          checkHealth().then(function (ok) {
+            if (ok) { clearInterval(retryTimer); loadSPA(); }
+          });
+        }, RETRY_MS);
+      }
+
+      checkHealth().then(function (ready) {
+        if (ready) { loadSPA(); } else { startRetry(); }
+      });
+    })();
+  </script>
 </body>
 </html>

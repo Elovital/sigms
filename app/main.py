@@ -1,4 +1,5 @@
 """SIGMS ELOVITAL - Sistema Integrado de Gestão de Mediação de Seguros"""
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
@@ -21,21 +22,41 @@ async def lifespan(app: FastAPI):
     Path("data/backups").mkdir(exist_ok=True)
     Path("data/archive").mkdir(exist_ok=True)
     logger.info(f"[SIGMS] DATABASE_URL driver: {settings.DATABASE_URL.split('://')[0]}")
-    try:
-        await create_tables()
-        logger.info("[SIGMS] Tabelas criadas/verificadas com sucesso")
-    except Exception as e:
-        logger.error(f"[SIGMS] ERRO ao criar tabelas: {e}")
-        raise
+
+    # Criar tabelas — até 5 tentativas (BD pode demorar a arrancar no cold start)
+    for attempt in range(1, 6):
+        try:
+            await create_tables()
+            logger.info("[SIGMS] Tabelas criadas/verificadas com sucesso")
+            break
+        except Exception as e:
+            if attempt == 5:
+                logger.error(f"[SIGMS] FATAL: não foi possível criar tabelas após 5 tentativas: {e}")
+                raise
+            wait = attempt * 3
+            logger.warning(f"[SIGMS] Tentativa {attempt}/5 ao criar tabelas falhou: {e}. A aguardar {wait}s...")
+            await asyncio.sleep(wait)
+
+    # Seed de dados padrão — não crítico: se falhar, a app continua
     try:
         await seed_defaults()
         logger.info("[SIGMS] seed_defaults concluído")
     except Exception as e:
-        logger.error(f"[SIGMS] ERRO em seed_defaults: {e}")
-        raise
-    start_scheduler()
+        logger.error(f"[SIGMS] AVISO: seed_defaults falhou (não crítico, app continua): {e}")
+
+    # Scheduler — não crítico
+    try:
+        start_scheduler()
+        logger.info("[SIGMS] Scheduler iniciado")
+    except Exception as e:
+        logger.error(f"[SIGMS] AVISO: scheduler não iniciou: {e}")
+
     yield
-    stop_scheduler()
+
+    try:
+        stop_scheduler()
+    except Exception:
+        pass
 
 
 async def seed_defaults():

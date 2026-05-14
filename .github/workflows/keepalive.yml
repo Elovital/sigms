@@ -1,0 +1,34 @@
+name: Keep-Alive — SIGMS Elovital
+
+# Pinga o servidor a cada 14 minutos para evitar spin-down do plano gratuito Render.
+# O Render encerra serviços gratuitos após 15 min de inatividade; este cron previne isso.
+
+on:
+  schedule:
+    - cron: '*/14 * * * *'   # a cada 14 minutos, 24h/dia
+  workflow_dispatch:           # permite correr manualmente se necessário
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Ping SIGMS Health
+        run: |
+          echo "⏰ $(date -u '+%Y-%m-%d %H:%M:%S UTC') — A verificar SIGMS..."
+          HTTP_CODE=$(curl -s -o /tmp/health_resp.json -w "%{http_code}" \
+            --max-time 30 \
+            https://sigms-1nbh.onrender.com/health)
+          echo "HTTP status: $HTTP_CODE"
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "✅ Servidor online"
+            cat /tmp/health_resp.json
+          else
+            echo "⚠️  Servidor devolveu $HTTP_CODE (pode estar a acordar)"
+            # Segunda tentativa após 20 segundos
+            sleep 20
+            HTTP_CODE2=$(curl -s -o /dev/null -w "%{http_code}" \
+              --max-time 30 \
+              https://sigms-1nbh.onrender.com/health)
+            echo "Segunda tentativa: $HTTP_CODE2"
+          fi
