@@ -39,12 +39,16 @@ async def list_users(db: AsyncSession = Depends(get_db), current_user: User = De
 
 @router.post("/users", status_code=201)
 async def create_user(body: UserIn, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_admin)):
-    existing = await db.execute(select(User).where(User.username == body.username))
-    if existing.scalar_one_or_none():
+    # Verificar username duplicado
+    if (await db.execute(select(User).where(User.username == body.username))).scalar_one_or_none():
         raise HTTPException(status_code=409, detail="Username já existe")
+    # Verificar email duplicado (evita erro 500 por unique constraint na BD)
+    if (await db.execute(select(User).where(User.email == body.email))).scalar_one_or_none():
+        raise HTTPException(status_code=409, detail="Email já está em uso por outro utilizador")
     user = User(username=body.username, email=body.email, hashed_password=hash_password(body.password), role=body.role, must_change_password=True)
     db.add(user)
     await db.commit()
+    await db.refresh(user)  # garante que user.id e outros campos gerados pela BD estão populados
     return {"id": user.id, "username": user.username, "email": user.email, "role": user.role}
 
 
