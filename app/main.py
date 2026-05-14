@@ -23,33 +23,10 @@ async def lifespan(app: FastAPI):
     Path("data/archive").mkdir(exist_ok=True)
     logger.info(f"[SIGMS] DATABASE_URL driver: {settings.DATABASE_URL.split('://')[0]}")
 
-    # Criar tabelas — até 5 tentativas (BD pode demorar a arrancar no cold start)
-    for attempt in range(1, 6):
-        try:
-            await create_tables()
-            logger.info("[SIGMS] Tabelas criadas/verificadas com sucesso")
-            break
-        except Exception as e:
-            if attempt == 5:
-                logger.error(f"[SIGMS] FATAL: não foi possível criar tabelas após 5 tentativas: {e}")
-                raise
-            wait = attempt * 3
-            logger.warning(f"[SIGMS] Tentativa {attempt}/5 ao criar tabelas falhou: {e}. A aguardar {wait}s...")
-            await asyncio.sleep(wait)
-
-    # Seed de dados padrão — não crítico: se falhar, a app continua
-    try:
-        await seed_defaults()
-        logger.info("[SIGMS] seed_defaults concluído")
-    except Exception as e:
-        logger.error(f"[SIGMS] AVISO: seed_defaults falhou (não crítico, app continua): {e}")
-
-    # Scheduler — não crítico
-    try:
-        start_scheduler()
-        logger.info("[SIGMS] Scheduler iniciado")
-    except Exception as e:
-        logger.error(f"[SIGMS] AVISO: scheduler não iniciou: {e}")
+    # Inicializar BD em background — o servidor inicia imediatamente sem bloquear.
+    # O Render verifica /health logo após o arranque; se a BD demorar, o health
+    # já responde 200 (db: "starting") e o proxy começa a servir pedidos.
+    asyncio.create_task(_init_database())
 
     yield
 
@@ -57,6 +34,41 @@ async def lifespan(app: FastAPI):
         stop_scheduler()
     except Exception:
         pass
+
+
+_db_ready = False
+
+
+async def _init_database():
+    """Inicializar BD em background — até 5 tentativas com backoff."""
+    global _db_ready
+    for attempt in range(1, 6):
+        try:
+            await create_tables()
+            logger.info("[SIGMS] Tabelas criadas/verificadas com sucesso")
+            break
+        except Exception as e:
+            if attempt == 5:
+                logger.error(f"[SIGMS] BD: não foi possível criar tabelas após 5 tentativas: {e}")
+                return
+            wait = attempt * 5
+            logger.warning(f"[SIGMS] BD tentativa {attempt}/5 falhou: {e}. Retry em {wait}s...")
+            await asyncio.sleep(wait)
+
+    try:
+        await seed_defaults()
+        logger.info("[SIGMS] seed_defaults concluído")
+    except Exception as e:
+        logger.error(f"[SIGMS] seed_defaults falhou (não crítico): {e}")
+
+    try:
+        start_scheduler()
+        logger.info("[SIGMS] Scheduler iniciado")
+    except Exception as e:
+        logger.error(f"[SIGMS] Scheduler não iniciou: {e}")
+
+    _db_ready = True
+    logger.info("[SIGMS] Inicialização completa — sistema pronto")
 
 
 async def seed_defaults():
@@ -184,20 +196,25 @@ async def root():
 async def health():
     from sqlalchemy import text
     from app.database import engine
-    db_status = "unknown"
+    db_status = "starting"
     db_error = None
     try:
-        async with engine.begin() as conn:
-            await conn.execute(text("SELECT 1"))
+        async def _ping():
+            async with engine.begin() as conn:
+                await conn.execute(text("SELECT 1"))
+        await asyncio.wait_for(_ping(), timeout=5)
         db_status = "ok"
+    except asyncio.TimeoutError:
+        db_status = "timeout"
     except Exception as e:
         db_status = "error"
-        db_error = str(e)[:300]
+        db_error = str(e)[:200]
     return {
         "status": "ok",
         "app": "SIGMS ELOVITAL",
         "version": "1.0.0",
         "db": db_status,
+        "db_ready": _db_ready,
         "db_error": db_error,
         "db_url_driver": settings.DATABASE_URL.split("://")[0],
     }

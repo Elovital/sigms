@@ -90,21 +90,33 @@
       var spaLoaded  = false;
       var retryTimer = null;
 
+      // Retorna: 'ready' | 'starting' | 'down'
       function checkHealth() {
         return new Promise(function (resolve) {
           var xhr = new XMLHttpRequest();
           var done = false;
           var tid = setTimeout(function () {
-            if (!done) { done = true; xhr.abort(); resolve(false); }
-          }, 8000);
+            if (!done) { done = true; xhr.abort(); resolve('down'); }
+          }, 10000);
           xhr.open('GET', '/health', true);
           xhr.onload = function () {
-            if (!done) { done = true; clearTimeout(tid); resolve(xhr.status === 200); }
+            if (!done) {
+              done = true; clearTimeout(tid);
+              if (xhr.status === 200) {
+                try {
+                  var data = JSON.parse(xhr.responseText);
+                  // db: 'ok' → pronto; db: 'starting'/'timeout' → quase pronto
+                  resolve((data.db === 'ok') ? 'ready' : 'starting');
+                } catch (e) { resolve('ready'); }
+              } else {
+                resolve('down');
+              }
+            }
           };
           xhr.onerror = function () {
-            if (!done) { done = true; clearTimeout(tid); resolve(false); }
+            if (!done) { done = true; clearTimeout(tid); resolve('down'); }
           };
-          try { xhr.send(); } catch (e) { if (!done) { done = true; clearTimeout(tid); resolve(false); } }
+          try { xhr.send(); } catch (e) { if (!done) { done = true; clearTimeout(tid); resolve('down'); } }
         });
       }
 
@@ -146,14 +158,17 @@
             wakeMsg.textContent = 'O servidor demorou demasiado. Por favor recarregue a página.';
             return;
           }
-          checkHealth().then(function (ok) {
-            if (ok) { clearInterval(retryTimer); loadSPA(); }
+          checkHealth().then(function (state) {
+            if (state === 'ready' || state === 'starting') {
+              clearInterval(retryTimer);
+              loadSPA();
+            }
           });
         }, RETRY_MS);
       }
 
-      checkHealth().then(function (ready) {
-        if (ready) { loadSPA(); } else { startRetry(); }
+      checkHealth().then(function (state) {
+        if (state === 'ready' || state === 'starting') { loadSPA(); } else { startRetry(); }
       });
     })();
   </script>
