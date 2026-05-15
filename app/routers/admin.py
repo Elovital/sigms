@@ -45,7 +45,7 @@ async def create_user(body: UserIn, db: AsyncSession = Depends(get_db), current_
     # Verificar email duplicado (evita erro 500 por unique constraint na BD)
     if (await db.execute(select(User).where(User.email == body.email))).scalar_one_or_none():
         raise HTTPException(status_code=409, detail="Email já está em uso por outro utilizador")
-    user = User(username=body.username, email=body.email, hashed_password=hash_password(body.password), role=body.role, must_change_password=True)
+    user = User(username=body.username, email=body.email, hashed_password=hash_password(body.password), role=body.role, must_change_password=False)
     db.add(user)
     await db.commit()
     await db.refresh(user)  # garante que user.id e outros campos gerados pela BD estão populados

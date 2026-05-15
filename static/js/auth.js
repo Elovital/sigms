@@ -256,12 +256,15 @@ export function showForceChangeModal() {
     overlay.id = 'force-change-overlay';
     overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:9999';
     overlay.innerHTML = `
-      <div style="background:#fff;border-radius:12px;padding:32px;max-width:400px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.3)">
-        <h3 style="margin:0 0 8px;font-size:18px;color:#111">🔑 Alterar Senha Obrigatório</h3>
-        <p style="margin:0 0 20px;font-size:14px;color:#6b7280">Por segurança, deve definir uma nova senha antes de continuar.</p>
+      <div style="background:#fff;border-radius:12px;padding:32px;max-width:420px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.3)">
+        <h3 style="margin:0 0 8px;font-size:18px;color:#111">🔑 Definir Nova Senha</h3>
+        <div style="background:#fef3c7;border:1px solid #fbbf24;border-radius:8px;padding:12px 14px;margin:0 0 20px;font-size:13px;color:#92400e;line-height:1.5">
+          ⚠️ A sua senha foi reposta pelo administrador.<br>
+          <strong>Introduza a senha temporária que recebeu</strong> no primeiro campo, e defina uma nova senha pessoal nos campos seguintes.
+        </div>
         <div class="form-group">
-          <label>Senha Actual</label>
-          <input type="password" id="fc-current" placeholder="••••••••" autocomplete="current-password">
+          <label>Senha Temporária (fornecida pelo admin)</label>
+          <input type="password" id="fc-current" placeholder="Senha que o administrador lhe deu" autocomplete="current-password">
         </div>
         <div class="form-group">
           <label>Nova Senha</label>
