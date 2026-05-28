@@ -27,10 +27,23 @@ logger = logging.getLogger(__name__)
 # O SQLAlchemy com asyncpg exige o prefixo "postgresql+asyncpg://".
 
 def _normalize_db_url(url: str) -> str:
+    # 1. Normalizar prefixo → postgresql+asyncpg://
     if url.startswith("postgres://"):
         url = "postgresql+asyncpg://" + url[len("postgres://"):]
     elif url.startswith("postgresql://") and "+asyncpg" not in url:
         url = "postgresql+asyncpg://" + url[len("postgresql://"):]
+
+    # 2. Remover parâmetros SSL da URL para asyncpg
+    # asyncpg NÃO aceita sslmode=require (nem outros params SSL) na query string —
+    # esses parâmetros são de libpq. O SSL é configurado via connect_args (ssl=ctx).
+    # Neon, Supabase e outros serviços incluem ?sslmode=require por defeito.
+    if url.startswith("postgresql+asyncpg://") and "sslmode=" in url:
+        from urllib.parse import urlparse, urlencode, parse_qs, urlunparse
+        parsed = urlparse(url)
+        params = {k: v[0] for k, v in parse_qs(parsed.query).items()
+                  if k not in ("sslmode", "sslcert", "sslkey", "sslrootcert", "sslpassword")}
+        url = urlunparse(parsed._replace(query=urlencode(params)))
+
     return url
 
 _url: str = _normalize_db_url(settings.DATABASE_URL)
