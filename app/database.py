@@ -20,9 +20,20 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 
-# ─── Validação preventiva ──────────────────────────────────────────────────────
+# ─── Normalizar URL ────────────────────────────────────────────────────────────
+# Plataformas cloud (Fly.io, Neon, Render, Supabase) fornecem URLs nos formatos:
+#   postgres://...          → normalizar para postgresql+asyncpg://
+#   postgresql://...        → normalizar para postgresql+asyncpg://
+# O SQLAlchemy com asyncpg exige o prefixo "postgresql+asyncpg://".
 
-_url: str = settings.DATABASE_URL
+def _normalize_db_url(url: str) -> str:
+    if url.startswith("postgres://"):
+        url = "postgresql+asyncpg://" + url[len("postgres://"):]
+    elif url.startswith("postgresql://") and "+asyncpg" not in url:
+        url = "postgresql+asyncpg://" + url[len("postgresql://"):]
+    return url
+
+_url: str = _normalize_db_url(settings.DATABASE_URL)
 
 def _warn_sqlite_production() -> None:
     """Emite aviso claro se SQLite absoluto for usado (dados efémeros em cloud)."""
