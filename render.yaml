@@ -6,8 +6,22 @@ services:
     plan: free
     healthCheckPath: /health
     envVars:
+      # ──────────────────────────────────────────────────────────────────────────
+      # DATABASE_URL — OBRIGATÓRIO definir no painel Render com PostgreSQL externo.
+      #
+      # O Render free NÃO tem disco persistente: SQLite perde todos os dados
+      # em cada deploy/restart. Usar sempre PostgreSQL para produção.
+      #
+      # Opções GRATUITAS (sem expiração):
+      #   Supabase → https://supabase.com  (500 MB grátis)
+      #     URL: postgresql+asyncpg://postgres:[PASS]@[HOST].supabase.co:5432/postgres
+      #   Neon     → https://neon.tech      (0.5 GB grátis, serverless)
+      #     URL: postgresql+asyncpg://[USER]:[PASS]@[HOST].neon.tech/[DBNAME]?sslmode=require
+      #
+      # Definir no painel: Render → sigms-elovital → Environment → DATABASE_URL
+      # ──────────────────────────────────────────────────────────────────────────
       - key: DATABASE_URL
-        value: sqlite+aiosqlite:////app/data/sigms.db
+        sync: false   # Não sobrescrever valor já definido no painel Render
       - key: JWT_SECRET
         generateValue: true
       - key: ENCRYPTION_KEY

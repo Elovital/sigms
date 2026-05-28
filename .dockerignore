@@ -1,0 +1,37 @@
+# Base de dados local — não incluir na imagem Docker
+data/sigms.db
+data/backups/
+data/archive/
+data/*.log
+
+# Ambiente virtual Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.pytest_cache/
+
+# Variáveis de ambiente (segurança)
+.env
+.env.local
+.env.production
+
+# Ficheiros do sistema operativo
+.DS_Store
+Thumbs.db
+*.log
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Git
+.git/
+.gitignore
+
+# Docker (não incluir o próprio compose na imagem)
+docker-compose*.yml

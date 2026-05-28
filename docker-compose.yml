@@ -1,0 +1,98 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# SIGMS ELOVITAL — Docker Compose (Self-Hosting com PostgreSQL persistente)
+#
+# Uso rápido:
+#   1. cp .env.example .env          # copiar e editar variáveis
+#   2. docker compose up -d          # arrancar em background
+#   3. docker compose logs -f app    # ver logs da aplicação
+#   4. Aceder em http://localhost:8000
+#
+# Parar:    docker compose down
+# Backup:   docker compose exec db pg_dump -U sigms sigms > backup.sql
+# Restore:  docker compose exec -T db psql -U sigms sigms < backup.sql
+# ══════════════════════════════════════════════════════════════════════════════
+
+services:
+
+  # ── Base de dados PostgreSQL ──────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    container_name: sigms-db
+    restart: always
+    environment:
+      POSTGRES_USER: sigms
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-SigmsSecure2026!}
+      POSTGRES_DB: sigms
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - sigms_db_data:/var/lib/postgresql/data   # Dados PERSISTENTES
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sigms -d sigms"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    # Não expor porta em produção (remover a linha abaixo para fechar ao exterior)
+    ports:
+      - "127.0.0.1:5432:5432"   # Apenas localhost; remover completamente em produção
+
+  # ── Aplicação SIGMS ───────────────────────────────────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sigms-app
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://sigms:${POSTGRES_PASSWORD:-SigmsSecure2026!}@db:5432/sigms
+      JWT_SECRET: ${JWT_SECRET:-MUDAR_EM_PRODUCAO_string_aleatoria_minimo_32_caracteres}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-MUDAR_EM_PRODUCAO_string_aleatoria_minimo_32_caracteres}
+      APP_URL: ${APP_URL:-http://localhost:8000}
+      BREVO_API_KEY: ${BREVO_API_KEY:-}
+      SMTP_HOST: ${SMTP_HOST:-smtp.hostinger.com}
+      SMTP_PORT: ${SMTP_PORT:-465}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-cotacao@elovital-ao.com}
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    volumes:
+      - sigms_app_data:/app/data   # Backups e ficheiros locais (também persistente)
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)\" 2>/dev/null && echo ok || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # ── Backup automático diário ──────────────────────────────────────────────
+  # (Opcional — guarda dump SQL em ./backups/ no host)
+  # Descomenta as linhas abaixo para activar
+  # backup:
+  #   image: postgres:16-alpine
+  #   container_name: sigms-backup
+  #   restart: always
+  #   environment:
+  #     PGPASSWORD: ${POSTGRES_PASSWORD:-SigmsSecure2026!}
+  #   volumes:
+  #     - ./backups:/backups
+  #   entrypoint: >
+  #     sh -c "while true; do
+  #       sleep 86400;
+  #       pg_dump -h db -U sigms sigms > /backups/sigms_$$(date +%Y%m%d_%H%M%S).sql;
+  #       echo 'Backup criado em' $$(date);
+  #       ls -t /backups/*.sql | tail -n +8 | xargs rm -f;
+  #     done"
+  #   depends_on:
+  #     db:
+  #       condition: service_healthy
+
+# ── Volumes persistentes ────────────────────────────────────────────────────
+volumes:
+  sigms_db_data:
+    driver: local   # Dados do PostgreSQL ficam em /var/lib/docker/volumes/
+  sigms_app_data:
+    driver: local   # Ficheiros da aplicação (backups, etc.)
