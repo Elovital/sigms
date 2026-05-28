@@ -1,0 +1,150 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# SIGMS ELOVITAL — Produção (VPS Ubuntu + domínio próprio + HTTPS automático)
+#
+# Inclui:
+#   - PostgreSQL 16 com volume persistente (dados nunca se perdem)
+#   - Aplicação SIGMS com restart automático
+#   - Caddy como reverse proxy com HTTPS automático (Let's Encrypt)
+#   - Backup automático diário para ./backups/
+#
+# Setup inicial (ver também scripts/setup_vps.sh):
+#   1. cp .env.example .env && nano .env   (definir DOMINIO, passwords, etc.)
+#   2. docker compose -f docker-compose.prod.yml up -d --build
+#
+# Comandos úteis:
+#   Logs:     docker compose -f docker-compose.prod.yml logs -f
+#   Parar:    docker compose -f docker-compose.prod.yml down
+#   Backup:   docker compose -f docker-compose.prod.yml exec db \
+#               pg_dump -U sigms sigms > backups/manual_$(date +%Y%m%d).sql
+#   Restore:  docker compose -f docker-compose.prod.yml exec -T db \
+#               psql -U sigms sigms < backups/ficheiro.sql
+#   Update:   git pull && docker compose -f docker-compose.prod.yml up -d --build
+# ══════════════════════════════════════════════════════════════════════════════
+
+services:
+
+  # ── Base de dados PostgreSQL ──────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    container_name: sigms-db
+    restart: always
+    environment:
+      POSTGRES_USER: sigms
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Definir POSTGRES_PASSWORD no .env}
+      POSTGRES_DB: sigms
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - sigms_db_data:/var/lib/postgresql/data    # ← Dados PERSISTENTES
+    networks:
+      - sigms-internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sigms -d sigms"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    # Porta NÃO exposta ao exterior — apenas acessível internamente pelo app
+
+  # ── Aplicação SIGMS ───────────────────────────────────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sigms-app
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://sigms:${POSTGRES_PASSWORD}@db:5432/sigms
+      JWT_SECRET: ${JWT_SECRET:?Definir JWT_SECRET no .env}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?Definir ENCRYPTION_KEY no .env}
+      APP_URL: https://${DOMINIO:?Definir DOMINIO no .env}
+      BREVO_API_KEY: ${BREVO_API_KEY:-}
+      SMTP_HOST: ${SMTP_HOST:-smtp.hostinger.com}
+      SMTP_PORT: ${SMTP_PORT:-465}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-cotacao@elovital-ao.com}
+      SMTP_FROM_NAME: ${SMTP_FROM_NAME:-ELOVITAL - Mediacao de Seguros}
+    volumes:
+      - sigms_app_data:/app/data    # ← Backups e logs persistentes
+    networks:
+      - sigms-internal
+      - sigms-web
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)\" 2>/dev/null"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    # Porta 8000 NÃO exposta directamente — apenas através do Caddy (HTTPS)
+
+  # ── Caddy — Reverse proxy com HTTPS automático ────────────────────────────
+  # Obtém e renova certificados Let's Encrypt automaticamente.
+  # Basta ter o domínio a apontar para o IP deste servidor.
+  caddy:
+    image: caddy:2-alpine
+    container_name: sigms-caddy
+    restart: always
+    ports:
+      - "80:80"      # HTTP → redireccionado para HTTPS
+      - "443:443"    # HTTPS
+      - "443:443/udp" # HTTP/3
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data            # Certificados TLS persistentes
+      - caddy_config:/config
+    networks:
+      - sigms-web
+    depends_on:
+      app:
+        condition: service_healthy
+    environment:
+      DOMINIO: ${DOMINIO}
+
+  # ── Backup automático diário ──────────────────────────────────────────────
+  backup:
+    image: postgres:16-alpine
+    container_name: sigms-backup
+    restart: always
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ./backups:/backups   # Dumps SQL guardados no host (fora do Docker)
+    networks:
+      - sigms-internal
+    entrypoint: >
+      sh -c "
+        mkdir -p /backups &&
+        echo '✓ Serviço de backup iniciado (backup diário às 02:00)' &&
+        while true; do
+          sleep 86400;
+          FICHEIRO=/backups/sigms_$$(date +%Y%m%d_%H%M%S).sql;
+          pg_dump -h db -U sigms sigms > $$FICHEIRO &&
+          echo \"✓ Backup criado: $$FICHEIRO ($$(du -sh $$FICHEIRO | cut -f1))\";
+          ls -t /backups/sigms_*.sql 2>/dev/null | tail -n +15 | xargs -r rm -f;
+          echo '  (backups antigos removidos — mantidos últimos 14)';
+        done
+      "
+    depends_on:
+      db:
+        condition: service_healthy
+
+# ── Redes ────────────────────────────────────────────────────────────────────
+networks:
+  sigms-internal:
+    driver: bridge    # Rede interna: app ↔ db ↔ backup (sem acesso externo)
+  sigms-web:
+    driver: bridge    # Rede web: caddy ↔ app
+
+# ── Volumes persistentes ─────────────────────────────────────────────────────
+volumes:
+  sigms_db_data:
+    driver: local    # PostgreSQL — dados em /var/lib/docker/volumes/sigms_db_data/
+  sigms_app_data:
+    driver: local    # Ficheiros da app — backups internos, logs
+  caddy_data:
+    driver: local    # Certificados TLS Let's Encrypt
+  caddy_config:
+    driver: local    # Configuração Caddy

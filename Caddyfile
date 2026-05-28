@@ -1,0 +1,42 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# SIGMS ELOVITAL — Caddyfile (HTTPS automático via Let's Encrypt)
+#
+# Substitua "sigms.elovital-ao.com" pelo seu domínio real.
+# Caddy obtém e renova o certificado TLS automaticamente.
+#
+# Para usar subdomínio: sigms.elovital-ao.com { ... }
+# Para usar domínio raiz: elovital-ao.com { ... }
+# Para ambos: elovital-ao.com, www.elovital-ao.com { ... }
+# ══════════════════════════════════════════════════════════════════════════════
+
+{env.DOMINIO} {
+
+    # Encaminhar todos os pedidos para a aplicação SIGMS
+    reverse_proxy app:8000 {
+        # Healthcheck interno — Caddy aguarda que o app esteja disponível
+        health_uri     /health
+        health_interval 30s
+        health_timeout  5s
+    }
+
+    # Compressão Gzip/Zstd para melhor desempenho
+    encode gzip zstd
+
+    # Cabeçalhos de segurança
+    header {
+        # Prevenir clickjacking
+        X-Frame-Options "SAMEORIGIN"
+        # Prevenir sniffing de content-type
+        X-Content-Type-Options "nosniff"
+        # HTTPS obrigatório por 1 ano
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        # Remover cabeçalho do servidor
+        -Server
+    }
+
+    # Logs de acesso (opcional — comentar para desactivar)
+    log {
+        output stdout
+        format console
+    }
+}
