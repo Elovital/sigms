@@ -62,7 +62,7 @@ function renderLayout(root) {
         .filter(item => !item.adminOnly || currentUser?.role === 'admin')
         .map(item => {
             if (item.section) return `<div class="nav-section-label">${item.section}</div>`;
-            return `<a class="nav-item" data-hash="${item.hash}" href="${item.hash}"><span class="icon">${item.icon}</span>${item.label}</a>`;
+            return `<a class="nav-item" data-hash="${item.hash}" href="${item.hash}"><span class="nav-icon-wrap">${item.icon}</span><span class="nav-label">${item.label}</span></a>`;
         }).join('');
 
     const initials = (currentUser?.username || 'U').slice(0, 2).toUpperCase();
