@@ -10,7 +10,7 @@ import base64
 import bcrypt
 from jose import jwt, JWTError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func, or_
 
 from app.config import settings
 from app.models.user import User, RefreshToken
@@ -51,6 +51,22 @@ def hash_token(token: str) -> str:
 async def get_user_by_username(db: AsyncSession, username: str) -> User | None:
     result = await db.execute(select(User).where(User.username == username))
     return result.scalar_one_or_none()
+
+
+async def get_user_by_login(db: AsyncSession, login: str) -> User | None:
+    """Autenticação flexível: aceita username OU email, sem distinção de
+    maiúsculas/minúsculas e ignorando espaços nas pontas."""
+    ident = (login or "").strip()
+    lowered = ident.lower()
+    result = await db.execute(
+        select(User).where(
+            or_(
+                func.lower(User.username) == lowered,
+                func.lower(User.email) == lowered,
+            )
+        )
+    )
+    return result.scalars().first()
 
 
 async def get_user_by_id(db: AsyncSession, user_id: int) -> User | None:

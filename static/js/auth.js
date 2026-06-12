@@ -54,8 +54,8 @@ export function renderLoginPage() {
     <!-- Login form -->
     <div id="login-form-container" ${resetToken ? 'class="hidden"' : ''}>
       <div class="form-group">
-        <label>Utilizador</label>
-        <input type="text" id="login-username" placeholder="Username" autocomplete="username">
+        <label>Email ou utilizador</label>
+        <input type="text" id="login-username" placeholder="seu@email.com" autocomplete="username">
       </div>
       <div class="form-group">
         <label>Palavra-passe</label>

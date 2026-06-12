@@ -35,7 +35,7 @@ class TokenResponse(BaseModel):
 
 @router.post("/login", response_model=TokenResponse)
 async def login(body: LoginRequest, response: Response, request: Request, db: AsyncSession = Depends(get_db)):
-    user = await auth_service.get_user_by_username(db, body.username)
+    user = await auth_service.get_user_by_login(db, body.username)
     if not user or not auth_service.verify_password(body.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Credenciais inválidas")
     if not user.is_active:
