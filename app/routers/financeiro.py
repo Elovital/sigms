@@ -206,12 +206,14 @@ async def financial_summary(db: AsyncSession = Depends(get_db), current_user: Us
     total_premios = (await db.execute(select(func.sum(Premio.premio_base)))).scalar() or 0.0
     comissoes_previstas = (await db.execute(select(func.sum(Comissao.valor)).where(Comissao.estado == "Prevista"))).scalar() or 0.0
     comissoes_recebidas = (await db.execute(select(func.sum(Comissao.valor)).where(Comissao.estado == "Recebida"))).scalar() or 0.0
+    comissoes_pagas = (await db.execute(select(func.sum(Comissao.valor)).where(Comissao.estado == "Paga"))).scalar() or 0.0
     pagamentos_atrasados = (await db.execute(select(func.count()).where(Pagamento.estado == "Atrasado"))).scalar() or 0
 
     return {
         "total_premios": round(total_premios, 2),
         "comissoes_previstas": round(comissoes_previstas, 2),
         "comissoes_recebidas": round(comissoes_recebidas, 2),
+        "comissoes_pagas": round(comissoes_pagas, 2),
         "pagamentos_atrasados": pagamentos_atrasados,
     }
 

@@ -42,6 +42,7 @@ export async function renderFinanceiro(container, currentUser = null) {
             <option value="">Todas</option>
             <option value="Prevista">Prevista</option>
             <option value="Recebida">Recebida</option>
+            <option value="Paga">Paga</option>
             <option value="Estornada">Estornada</option>
           </select>
         </div>
@@ -137,6 +138,7 @@ export async function renderFinanceiro(container, currentUser = null) {
         <select id="comissao-edit-estado">
           <option value="Prevista">Prevista</option>
           <option value="Recebida">Recebida</option>
+          <option value="Paga">Paga</option>
           <option value="Estornada">Estornada</option>
         </select>
       </div>
@@ -175,10 +177,11 @@ async function loadSummary() {
   try {
     const s = await get('/financeiro/summary');
     document.getElementById('fin-summary').innerHTML = `
-    <div class="kpi-grid" style="grid-template-columns:repeat(4,1fr)">
+    <div class="kpi-grid" style="grid-template-columns:repeat(5,1fr)">
       <div class="kpi-card"><div class="kpi-icon blue">📊</div><div class="kpi-info"><div class="kpi-value">${formatAKZ(s.total_premios)}</div><div class="kpi-label">Total Prémios</div></div></div>
       <div class="kpi-card"><div class="kpi-icon yellow">⏳</div><div class="kpi-info"><div class="kpi-value">${formatAKZ(s.comissoes_previstas)}</div><div class="kpi-label">Comissões Previstas</div></div></div>
       <div class="kpi-card"><div class="kpi-icon green">✅</div><div class="kpi-info"><div class="kpi-value">${formatAKZ(s.comissoes_recebidas)}</div><div class="kpi-label">Comissões Recebidas</div></div></div>
+      <div class="kpi-card"><div class="kpi-icon blue">💸</div><div class="kpi-info"><div class="kpi-value">${formatAKZ(s.comissoes_pagas || 0)}</div><div class="kpi-label">Comissões Pagas</div></div></div>
       <div class="kpi-card"><div class="kpi-icon red">❗</div><div class="kpi-info"><div class="kpi-value">${s.pagamentos_atrasados}</div><div class="kpi-label">Pagamentos Atrasados</div></div></div>
     </div>`;
   } catch {}
@@ -253,6 +256,7 @@ async function loadComissoes() {
           <td>
             <div class="flex gap-2">
               ${c.estado === 'Prevista' ? `<button class="btn btn-sm btn-success" onclick="markComissaoRecebida(${c.id})">✓ Recebida</button>` : ''}
+              ${c.estado === 'Recebida' ? `<button class="btn btn-sm btn-primary" onclick="markComissaoPaga(${c.id})">✓ Paga</button>` : ''}
               <button class="btn btn-sm btn-secondary" onclick="openComissaoEdit(${c.id},'${c.apolice_numero || c.apolice_id}','${c.estado}')">✏️</button>
             </div>
           </td>
@@ -263,6 +267,13 @@ async function loadComissoes() {
       try {
         await put(`/financeiro/comissoes/${id}`, { estado: 'Recebida' });
         toast('Comissão marcada como recebida');
+        loadComissoes(); loadSummary();
+      } catch (e) { toast(e.message, 'error'); }
+    };
+    window.markComissaoPaga = async (id) => {
+      try {
+        await put(`/financeiro/comissoes/${id}`, { estado: 'Paga' });
+        toast('Comissão marcada como paga');
         loadComissoes(); loadSummary();
       } catch (e) { toast(e.message, 'error'); }
     };

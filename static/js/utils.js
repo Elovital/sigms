@@ -46,7 +46,7 @@ export function estadoBadge(estado) {
         'Ativa': 'badge-green', 'Suspensa': 'badge-yellow', 'Cancelada': 'badge-red', 'Caducada': 'badge-gray',
         'Pago': 'badge-green', 'Pendente': 'badge-yellow', 'Atrasado': 'badge-red', 'Cancelado': 'badge-gray',
         'Aberto': 'badge-blue', 'Em Analise': 'badge-yellow', 'Em Regularizacao': 'badge-cyan', 'Fechado': 'badge-gray', 'Anulado': 'badge-red',
-        'Prevista': 'badge-yellow', 'Recebida': 'badge-green', 'Estornada': 'badge-red',
+        'Prevista': 'badge-yellow', 'Recebida': 'badge-green', 'Paga': 'badge-blue', 'Estornada': 'badge-red',
         'Interessado': 'badge-green', 'Não Interessado': 'badge-red', 'Aguardar': 'badge-yellow',
         'Proposta Enviada': 'badge-blue', 'Convertido': 'badge-green',
     };
