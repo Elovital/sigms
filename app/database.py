@@ -89,15 +89,19 @@ def _build_engine(url: str):
     engine_kwargs: dict = {}
 
     if url.startswith("postgresql"):
-        import ssl as _ssl
-        ssl_ctx = _ssl.create_default_context()
-        ssl_ctx.check_hostname = False
-        ssl_ctx.verify_mode = _ssl.CERT_NONE
+        import os as _os
         connect_args = {
-            "ssl": ssl_ctx,
             "timeout": 10,           # asyncpg: timeout de ligação (segundos)
             "command_timeout": 30,   # asyncpg: timeout de comandos SQL
         }
+        # SSL activo por defeito (Neon/Supabase exigem). Desactivar para
+        # PostgreSQL interno sem SSL (ex.: container Docker) via DB_SSL=disable.
+        if _os.getenv("DB_SSL", "require").lower() != "disable":
+            import ssl as _ssl
+            ssl_ctx = _ssl.create_default_context()
+            ssl_ctx.check_hostname = False
+            ssl_ctx.verify_mode = _ssl.CERT_NONE
+            connect_args["ssl"] = ssl_ctx
         engine_kwargs = {
             "pool_pre_ping": True,   # Verifica ligação antes de usar (detecta desconexões)
             "pool_timeout": 15,      # Espera máx. por ligação disponível no pool
