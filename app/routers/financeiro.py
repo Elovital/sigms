@@ -224,7 +224,7 @@ async def get_compliance(
     current_user: User = Depends(get_current_user),
 ):
     """Compliance dashboard: ISS, Imposto Selo, ARSEG deadlines, anomalies."""
-    from datetime import timedelta
+    from datetime import timedelta, datetime, timezone
     from app.models.apolice import Apolice
     from app.models.client import Client
 
@@ -240,9 +240,11 @@ async def get_compliance(
     iss_estimado = round(comissoes_ano * 0.02, 2)
 
     # Imposto Selo acumulado no ano (prémios × 0.3%)
+    # created_at é timestamp — comparar com objecto de data (PostgreSQL é
+    # estrito quanto a tipos; uma string rebenta com "timestamp >= varchar").
     premios_ano = (await db.execute(
         select(func.sum(Premio.premio_base))
-        .where(Premio.created_at >= first_of_year.isoformat())
+        .where(Premio.created_at >= datetime.combine(first_of_year, datetime.min.time(), tzinfo=timezone.utc))
     )).scalar() or 0.0
     imposto_selo_estimado = round(premios_ano * 0.003, 2)
 
