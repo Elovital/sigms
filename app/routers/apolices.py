@@ -235,9 +235,28 @@ async def update_apolice(apolice_id: int, body: ApoliceIn, db: AsyncSession = De
     apolice = result.scalar_one_or_none()
     if not apolice:
         raise HTTPException(status_code=404, detail="Apólice não encontrada")
+    if body.risco_auto and not validate_matricula(body.risco_auto.matricula):
+        raise HTTPException(status_code=422, detail="Matrícula inválida")
     for field in ["seguradora_id", "ramo_id", "data_inicio", "data_fim", "data_renovacao", "estado", "observacoes"]:
         setattr(apolice, field, getattr(body, field))
     apolice.alerta_renovacao_enviado = False
+
+    # Sincronizar dados de risco (eram ignorados na edição — não gravavam).
+    # Cada apólice tem no máximo um risco de cada tipo (relação 1:1).
+    async def _sync_risco(model, existing_obj, payload):
+        if payload is None:
+            return
+        data = payload.model_dump()
+        if existing_obj:
+            for k, v in data.items():
+                setattr(existing_obj, k, v)
+        else:
+            db.add(model(apolice_id=apolice.id, **data))
+
+    await _sync_risco(RiscoAuto, apolice.risco_auto, body.risco_auto)
+    await _sync_risco(RiscoSaudeVida, apolice.risco_saude_vida, body.risco_saude_vida)
+    await _sync_risco(RiscoEmpresa, apolice.risco_empresa, body.risco_empresa)
+
     await db.commit()
     await db.refresh(apolice)
     return _apolice_dict(apolice)
