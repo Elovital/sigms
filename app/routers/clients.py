@@ -108,7 +108,8 @@ async def create_client(body: ClientIn, request: Request, db: AsyncSession = Dep
     db.add(client)
     await db.flush()
     for ct in body.contacts:
-        db.add(Contact(client_id=client.id, tipo=ct.tipo, valor=ct.valor, principal=ct.principal))
+        if (ct.valor or "").strip():
+            db.add(Contact(client_id=client.id, tipo=ct.tipo, valor=ct.valor.strip(), principal=ct.principal))
     if body.lpdp_aceite:
         await _log_lpdp(db, client.id, "ACEITE", current_user.id, get_client_ip(request))
     await _log_audit(db, current_user.id, "CREATE", client.id, ip=get_client_ip(request))
@@ -139,6 +140,17 @@ async def update_client(client_id: int, body: ClientIn, request: Request, db: As
 
     for field in ["nome", "data_nascimento", "data_constituicao", "iban", "morada_linha1", "morada_linha2", "provincia", "municipio"]:
         setattr(client, field, getattr(body, field))
+
+    # Sincronizar contactos: substituir pela lista enviada (ignorando vazios).
+    # Sem isto, os contactos inseridos/alterados na edição não eram gravados.
+    existing_contacts = await db.execute(select(Contact).where(Contact.client_id == client_id))
+    for ct in existing_contacts.scalars().all():
+        await db.delete(ct)
+    await db.flush()
+    for ct in body.contacts:
+        if (ct.valor or "").strip():
+            db.add(Contact(client_id=client.id, tipo=ct.tipo, valor=ct.valor.strip(), principal=ct.principal))
+
     if body.lpdp_aceite and not client.rgpd_aceite:
         client.rgpd_aceite = True
         await _log_lpdp(db, client.id, "ACEITE", current_user.id, get_client_ip(request))
