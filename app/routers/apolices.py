@@ -141,6 +141,8 @@ async def create_apolice(body: ApoliceIn, db: AsyncSession = Depends(get_db), cu
 
     # Auto-create Premio and Comissao if provided
     if body.premio_base and body.premio_base > 0:
+        if not (body.data_inicio or "").strip():
+            raise HTTPException(status_code=422, detail="Data de início é obrigatória para registar o prémio.")
         from app.services.financeiro_service import calcular_imposto, calcular_parcelas
         from datetime import date as date_type
         encargos = body.encargos or 0.0
@@ -260,6 +262,8 @@ async def update_apolice(apolice_id: int, body: ApoliceIn, db: AsyncSession = De
     # Sincronizar prémio e comissão na edição. Antes eram ignorados: ao alterar
     # o prémio, o sistema mantinha o valor antigo (gravava valores errados).
     if body.premio_base and body.premio_base > 0:
+        if not (body.data_inicio or "").strip():
+            raise HTTPException(status_code=422, detail="Data de início é obrigatória para registar o prémio.")
         from app.services.financeiro_service import calcular_imposto, calcular_parcelas
         from datetime import date as date_type
         encargos = body.encargos or 0.0

@@ -327,6 +327,9 @@ async function savePremio() {
     periodo_inicio: document.getElementById('np-inicio').value,
     periodo_fim: document.getElementById('np-fim').value,
   };
+  if (!body.apolice_id) { errEl.textContent = 'Selecione a apólice.'; errEl.classList.remove('hidden'); return; }
+  if (!body.premio_base || body.premio_base <= 0) { errEl.textContent = 'Indique o prémio base.'; errEl.classList.remove('hidden'); return; }
+  if (!body.periodo_inicio) { errEl.textContent = 'Preencha a data de início do período.'; errEl.classList.remove('hidden'); return; }
   const btn = document.getElementById('btn-save-premio');
   btn.disabled = true;
   try {
