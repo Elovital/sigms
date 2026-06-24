@@ -98,14 +98,12 @@ async def get_lembretes(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Próximos contactos agendados para os próximos 7 dias."""
-    today = date.today().isoformat()
-    threshold = (date.today() + timedelta(days=7)).isoformat()
+    """Todos os lembretes activos com data agendada (vencidos aparecem primeiro)."""
     result = await db.execute(
         select(Interacao).where(
-            Interacao.proximo_contacto >= today,
-            Interacao.proximo_contacto <= threshold,
             Interacao.lembrete_ativo == True,
+            Interacao.proximo_contacto.isnot(None),
+            Interacao.proximo_contacto != "",
         ).order_by(Interacao.proximo_contacto)
     )
     items = result.scalars().all()

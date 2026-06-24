@@ -1384,14 +1384,18 @@ async function enviarEmail() {
       const em = state.at.empresa;
       veiculo_info = [em.sector, em.num_trabalhadores?em.num_trabalhadores+' trab.':''].filter(Boolean).join(' · ');
     }
-    await post('/cotacoes/enviar-email', {
+    const resp = await post('/cotacoes/enviar-email', {
       email, mensagem: msg, html_content: html, seguradoras: segs,
       tipo: tab,
       cliente_nome: cliente,
       veiculo_info,
     });
     document.getElementById('modal-email').style.display='none';
-    showToast(`✅ Email enviado — ${tipo}`, 'success');
+    if (resp && resp.email_enviado === false) {
+      showToast(`⚠️ Cotação ${resp.numero} registada, mas o email não foi enviado (verifique o SMTP)`, 'danger');
+    } else {
+      showToast(`✅ Email enviado e cotação registada — ${tipo}`, 'success');
+    }
   } catch(e) { showToast('Erro ao enviar: '+e.message,'danger'); }
   finally { btn.disabled=false; btn.textContent='📤 Enviar'; }
 }

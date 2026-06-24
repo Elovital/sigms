@@ -6,6 +6,8 @@ export async function login(username, password) {
     const data = await post('/auth/login', { username, password });
     if (data.requires_2fa) return { requires_2fa: true, pre_auth_token: data.pre_auth_token };
     setToken(data.access_token);
+    // Novo login → mostrar o popup de acompanhamentos uma vez nesta sessão.
+    sessionStorage.removeItem('sigms_acomp_popup_shown');
     return { requires_2fa: false, must_change_password: data.must_change_password };
 }
 
@@ -22,6 +24,7 @@ export async function verify2FA(code, preAuthToken) {
     }
     const data = await res.json();
     setToken(data.access_token);
+    sessionStorage.removeItem('sigms_acomp_popup_shown');
     return { must_change_password: data.must_change_password };
 }
 

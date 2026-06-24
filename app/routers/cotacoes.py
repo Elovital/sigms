@@ -105,47 +105,45 @@ async def enviar_email_comparativo(
   </p>
 </body></html>"""
 
+    # 1. Guardar SEMPRE o registo da cotação primeiro — assim reflecte na
+    #    página de Cotações Enviadas mesmo que o envio do email falhe.
+    numero = await _next_numero(db)
+    segs_json  = json.dumps([s.nome  for s in body.seguradoras])
+    prems_json = json.dumps([s.premio for s in body.seguradoras])
+    cotacao = CotacaoEnviada(
+        numero=numero,
+        tipo=body.tipo or "saude",
+        cliente_nome=body.cliente_nome or "",
+        email_destino=body.email,
+        seguradoras=segs_json,
+        premios=prems_json,
+        veiculo_info=body.veiculo_info or "",
+        estado="Enviada",
+        created_by=current_user.id,
+    )
+    db.add(cotacao)
+    await db.commit()
+    await db.refresh(cotacao)
+    logger.info(f"[cotacoes] Cotação {numero} registada.")
+
+    # 2. Tentar enviar o email — a falha não apaga o registo já guardado.
     loop = asyncio.get_event_loop()
+    email_enviado = False
     try:
-        ok = await loop.run_in_executor(
+        email_enviado = bool(await loop.run_in_executor(
             None,
             partial(send_generic_email,
                     to_email=body.email,
                     subject=f"Mapa Comparativo de Cotações — {tipo_label} | ELOVITAL",
                     body_html=html),
-        )
+        ))
     except Exception as exc:
-        logger.error(f"[cotacoes] Excepção ao enviar email: {exc}")
-        raise HTTPException(status_code=500, detail=f"Erro SMTP: {exc}")
+        logger.error(f"[cotacoes] Cotação {numero} registada, mas email falhou: {exc}")
 
-    if not ok:
-        raise HTTPException(status_code=500, detail="Falha ao enviar email. Verifique a configuração SMTP.")
-
-    # Guardar registo de cotação enviada
-    try:
-        numero = await _next_numero(db)
-        segs_json  = json.dumps([s.nome  for s in body.seguradoras])
-        prems_json = json.dumps([s.premio for s in body.seguradoras])
-        cotacao = CotacaoEnviada(
-            numero=numero,
-            tipo=body.tipo or "saude",
-            cliente_nome=body.cliente_nome or "",
-            email_destino=body.email,
-            seguradoras=segs_json,
-            premios=prems_json,
-            veiculo_info=body.veiculo_info or "",
-            estado="Enviada",
-            created_by=current_user.id,
-        )
-        db.add(cotacao)
-        await db.commit()
-        await db.refresh(cotacao)
-        logger.info(f"[cotacoes] Cotação {numero} registada.")
-    except Exception as e:
-        logger.error(f"[cotacoes] Erro ao guardar cotação: {e}")
-        # Não bloquear — email já foi enviado
-
-    return {"ok": True, "numero": getattr(cotacao, "numero", None)}
+    if email_enviado:
+        return {"ok": True, "numero": numero, "email_enviado": True}
+    return {"ok": True, "numero": numero, "email_enviado": False,
+            "aviso": "Cotação registada. O email não foi enviado — verifique a configuração SMTP."}
 
 
 @router.get("/historico")

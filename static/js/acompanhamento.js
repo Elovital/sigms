@@ -125,7 +125,7 @@ export async function renderAcompanhamento(container, params = {}) {
 
   <div id="tab-lembretes" class="hidden">
     <div class="card">
-      <div class="card-header"><span class="card-title">🔔 Lembretes — Próximos 7 dias</span></div>
+      <div class="card-header"><span class="card-title">🔔 Lembretes Agendados</span></div>
       <div id="lembretes-list"><div class="loading"><div class="spinner"></div></div></div>
     </div>
   </div>
@@ -396,7 +396,7 @@ async function loadLembretes() {
     try {
         const data = await get('/acompanhamento/lembretes');
         if (!data.length) {
-            container.innerHTML = `<div class="empty-state"><div class="empty-state-icon">✅</div><div class="empty-state-title">Sem lembretes</div><div class="empty-state-text">Não há contactos agendados nos próximos 7 dias</div></div>`;
+            container.innerHTML = `<div class="empty-state"><div class="empty-state-icon">✅</div><div class="empty-state-title">Sem lembretes</div><div class="empty-state-text">Não há contactos agendados</div></div>`;
             return;
         }
         container.innerHTML = `
