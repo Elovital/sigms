@@ -31,7 +31,9 @@ class RiscoSaudeVida(Base):
     questionario_clinico_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     apolice: Mapped["Apolice"] = relationship("Apolice", back_populates="risco_saude_vida")
-    beneficiarios: Mapped[list["Beneficiario"]] = relationship("Beneficiario", back_populates="risco", cascade="all, delete-orphan")
+    # lazy="selectin": carregar beneficiários de forma eager — em async, o acesso
+    # lazy implícito a esta relação rebenta com MissingGreenlet (Erro 500).
+    beneficiarios: Mapped[list["Beneficiario"]] = relationship("Beneficiario", back_populates="risco", cascade="all, delete-orphan", lazy="selectin")
 
 
 class Beneficiario(Base):
