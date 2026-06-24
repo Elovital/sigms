@@ -141,7 +141,7 @@ async def create_apolice(body: ApoliceIn, db: AsyncSession = Depends(get_db), cu
 
     # Auto-create Premio and Comissao if provided
     if body.premio_base and body.premio_base > 0:
-        from app.services.financeiro_service import calcular_imposto
+        from app.services.financeiro_service import calcular_imposto, calcular_parcelas
         from datetime import date as date_type
         encargos = body.encargos or 0.0
         imposto = calcular_imposto(body.premio_base, encargos)
@@ -149,7 +149,7 @@ async def create_apolice(body: ApoliceIn, db: AsyncSession = Depends(get_db), cu
         frac = body.fracionamento or "Anual"
         frac_map = {"Anual": 1, "Semestral": 2, "Trimestral": 4, "Mensal": 12}
         n = frac_map.get(frac, 1)
-        parcela = round(total / n, 2)
+        parcelas = calcular_parcelas(frac, total)  # última parcela ajustada p/ somar o total exacto
         premio = Premio(
             apolice_id=apolice.id,
             premio_base=body.premio_base,
@@ -170,7 +170,7 @@ async def create_apolice(body: ApoliceIn, db: AsyncSession = Depends(get_db), cu
             y = inicio.year + (m - 1) // 12
             m = (m - 1) % 12 + 1
             venc = inicio.replace(year=y, month=m)
-            db.add(Pagamento(premio_id=premio.id, data_vencimento=venc.isoformat(), valor=parcela))
+            db.add(Pagamento(premio_id=premio.id, data_vencimento=venc.isoformat(), valor=parcelas[i]))
         if body.percentagem_comissao and body.percentagem_comissao > 0:
             valor_com = round(body.premio_base * body.percentagem_comissao / 100, 2)
             db.add(Comissao(
@@ -256,6 +256,59 @@ async def update_apolice(apolice_id: int, body: ApoliceIn, db: AsyncSession = De
     await _sync_risco(RiscoAuto, apolice.risco_auto, body.risco_auto)
     await _sync_risco(RiscoSaudeVida, apolice.risco_saude_vida, body.risco_saude_vida)
     await _sync_risco(RiscoEmpresa, apolice.risco_empresa, body.risco_empresa)
+
+    # Sincronizar prémio e comissão na edição. Antes eram ignorados: ao alterar
+    # o prémio, o sistema mantinha o valor antigo (gravava valores errados).
+    if body.premio_base and body.premio_base > 0:
+        from app.services.financeiro_service import calcular_imposto, calcular_parcelas
+        from datetime import date as date_type
+        encargos = body.encargos or 0.0
+        imposto = calcular_imposto(body.premio_base, encargos)
+        total = round(body.premio_base + encargos + imposto, 2)
+        frac = body.fracionamento or "Anual"
+        frac_map = {"Anual": 1, "Semestral": 2, "Trimestral": 4, "Mensal": 12}
+        n = frac_map.get(frac, 1)
+        parcelas = calcular_parcelas(frac, total)  # última parcela ajustada p/ somar o total exacto
+
+        premio = apolice.premios[0] if apolice.premios else None
+        if premio is None:
+            premio = Premio(apolice_id=apolice.id, moeda="AKZ")
+            db.add(premio)
+        premio.premio_base = body.premio_base
+        premio.encargos = encargos
+        premio.imposto_selo = imposto
+        premio.premio_total = total
+        premio.fracionamento = frac
+        premio.periodo_inicio = body.data_inicio
+        premio.periodo_fim = body.data_fim
+        await db.flush()
+
+        # Regenerar o plano de pagamentos — só se nenhuma parcela foi paga,
+        # para não destruir histórico financeiro já registado.
+        pagamentos = (await db.execute(select(Pagamento).where(Pagamento.premio_id == premio.id))).scalars().all()
+        if not any(pg.estado == "Pago" for pg in pagamentos):
+            for pg in pagamentos:
+                await db.delete(pg)
+            await db.flush()
+            inicio = date_type.fromisoformat(body.data_inicio)
+            months_step = {1: 12, 2: 6, 4: 3, 12: 1}.get(n, 12)
+            for i in range(n):
+                m = inicio.month + i * months_step
+                y = inicio.year + (m - 1) // 12
+                m = (m - 1) % 12 + 1
+                venc = inicio.replace(year=y, month=m)
+                db.add(Pagamento(premio_id=premio.id, data_vencimento=venc.isoformat(), valor=parcelas[i]))
+
+        # Comissão (atualiza a existente ou cria)
+        if body.percentagem_comissao and body.percentagem_comissao > 0:
+            valor_com = round(body.premio_base * body.percentagem_comissao / 100, 2)
+            comissao = apolice.comissoes[0] if apolice.comissoes else None
+            if comissao is None:
+                comissao = Comissao(apolice_id=apolice.id, tipo=body.tipo_comissao or "angariacao",
+                                    data_referencia=body.data_inicio, estado="Prevista")
+                db.add(comissao)
+            comissao.percentagem = body.percentagem_comissao
+            comissao.valor = valor_com
 
     await db.commit()
     await db.refresh(apolice)
