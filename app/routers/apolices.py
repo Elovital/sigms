@@ -116,6 +116,8 @@ async def list_apolices(
 
 @router.post("", status_code=201)
 async def create_apolice(body: ApoliceIn, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if not (body.numero or "").strip():
+        raise HTTPException(status_code=422, detail="O número da apólice é obrigatório.")
     if body.risco_auto and not validate_matricula(body.risco_auto.matricula):
         raise HTTPException(status_code=422, detail="Matrícula inválida")
     existing = await db.execute(select(Apolice).where(Apolice.numero == body.numero))
@@ -239,6 +241,14 @@ async def update_apolice(apolice_id: int, body: ApoliceIn, db: AsyncSession = De
         raise HTTPException(status_code=404, detail="Apólice não encontrada")
     if body.risco_auto and not validate_matricula(body.risco_auto.matricula):
         raise HTTPException(status_code=422, detail="Matrícula inválida")
+    # Permitir atribuir número a uma apólice que ficou sem número (ex.: importação).
+    # Não se altera um número já existente — isso podia partir referências.
+    if not (apolice.numero or "").strip() and (body.numero or "").strip():
+        novo_numero = body.numero.strip()
+        dup = await db.execute(select(Apolice).where(Apolice.numero == novo_numero, Apolice.id != apolice.id))
+        if dup.scalar_one_or_none():
+            raise HTTPException(status_code=409, detail="Número de apólice já existe")
+        apolice.numero = novo_numero
     for field in ["seguradora_id", "ramo_id", "data_inicio", "data_fim", "data_renovacao", "estado", "observacoes"]:
         setattr(apolice, field, getattr(body, field))
     apolice.alerta_renovacao_enviado = False

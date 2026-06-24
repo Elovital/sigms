@@ -397,7 +397,8 @@ async function openApoliceModal(apolice = null) {
   editingId = apolice?.id || null;
   document.getElementById('apolice-modal-title').textContent = apolice?.id ? 'Editar Apólice' : 'Nova Apólice';
   document.getElementById('a-numero').value = apolice?.numero || '';
-  document.getElementById('a-numero').disabled = !!apolice?.id;
+  // Número editável ao criar e também ao editar uma apólice que ficou sem número.
+  document.getElementById('a-numero').disabled = !!(apolice?.id && apolice?.numero);
   document.getElementById('a-estado').value = apolice?.estado || 'Ativa';
   if (apolice?.seguradora_id) document.getElementById('a-seguradora').value = apolice.seguradora_id;
   if (apolice?.ramo_id) document.getElementById('a-ramo').value = apolice.ramo_id;
@@ -506,6 +507,14 @@ async function saveApolice() {
     capital_seguro: parseFloat(document.getElementById('rsv-capital').value) || null,
     data_inicio_cobertura: document.getElementById('rsv-inicio').value || null,
   };
+
+  if (!body.numero || !body.numero.trim()) {
+    errEl.textContent = 'O número da apólice é obrigatório.'; errEl.classList.remove('hidden'); return;
+  }
+  // Aviso de sanidade: prémio anormalmente alto (apanha erros de separador decimal)
+  if (body.premio_base && body.premio_base >= 100000000) {
+    if (!confirm(`O prémio base (${formatAKZ(body.premio_base)}) é invulgarmente alto.\n\nVerifique se não falta o separador decimal. Deseja gravar mesmo assim?`)) return;
+  }
 
   const btn = document.getElementById('btn-save-apolice');
   btn.disabled = true; btn.textContent = 'A guardar...';
