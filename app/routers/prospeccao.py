@@ -1,5 +1,6 @@
 """Prospecção — pipeline de cotações e propostas."""
 from typing import Optional
+from datetime import date, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,9 +9,35 @@ from sqlalchemy import select, func
 from app.database import get_db
 from app.dependencies import get_current_user, require_admin
 from app.models.prospeccao import Prospeccao
+from app.models.acompanhamento import Interacao
 from app.models.user import User
 
 router = APIRouter(prefix="/prospeccao", tags=["prospeccao"])
+
+ESTADO_AGUARDA_CLIENTE = "Aguarda Cliente"
+
+
+async def _criar_seguimento_aguarda_cliente(db: AsyncSession, p: Prospeccao, user_id: int | None):
+    """Cria automaticamente uma tarefa de acompanhamento quando a prospecção
+    passa a 'Aguarda Cliente'. O alerta é agendado para 15 dias após a emissão.
+    Evita duplicados se já existir um lembrete activo para esta prospecção."""
+    assunto = f"Seguimento de prospecção #{p.id}: {p.titulo}"
+    existe = await db.execute(
+        select(Interacao).where(Interacao.assunto == assunto, Interacao.lembrete_ativo == True)
+    )
+    if existe.scalar_one_or_none():
+        return
+    hoje = date.today()
+    db.add(Interacao(
+        client_id=p.client_id,
+        tipo="Chamada",
+        data_interacao=hoje.isoformat(),
+        assunto=assunto,
+        notas="Tarefa criada automaticamente — prospecção em 'Aguarda Cliente'. Alerta 15 dias após a emissão.",
+        proximo_contacto=(hoje + timedelta(days=15)).isoformat(),
+        lembrete_ativo=True,
+        created_by=user_id,
+    ))
 
 
 class ProspeccaoIn(BaseModel):
@@ -99,6 +126,9 @@ async def create_prospeccao(
 ):
     p = Prospeccao(**body.model_dump(), created_by=current_user.id)
     db.add(p)
+    await db.flush()
+    if p.estado == ESTADO_AGUARDA_CLIENTE:
+        await _criar_seguimento_aguarda_cliente(db, p, current_user.id)
     await db.commit()
     await db.refresh(p)
     return _dict(p)
@@ -128,8 +158,11 @@ async def update_prospeccao(
     p = result.scalar_one_or_none()
     if not p:
         raise HTTPException(status_code=404, detail="Prospecção não encontrada")
+    estado_anterior = p.estado
     for field, value in body.model_dump().items():
         setattr(p, field, value)
+    if p.estado == ESTADO_AGUARDA_CLIENTE and estado_anterior != ESTADO_AGUARDA_CLIENTE:
+        await _criar_seguimento_aguarda_cliente(db, p, current_user.id)
     await db.commit()
     await db.refresh(p)
     return _dict(p)
@@ -147,9 +180,12 @@ async def update_estado(
     p = result.scalar_one_or_none()
     if not p:
         raise HTTPException(status_code=404, detail="Prospecção não encontrada")
+    estado_anterior = p.estado
     p.estado = estado
     if apolice_id:
         p.apolice_id = apolice_id
+    if estado == ESTADO_AGUARDA_CLIENTE and estado_anterior != ESTADO_AGUARDA_CLIENTE:
+        await _criar_seguimento_aguarda_cliente(db, p, current_user.id)
     await db.commit()
     await db.refresh(p)
     return _dict(p)

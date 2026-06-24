@@ -48,6 +48,53 @@ export async function renderDashboard(container) {
   loadCharts();
   loadProspCard();
   loadQuickActions();
+  maybeShowAcompanhamentosPopup();
+}
+
+// Popup de acompanhamentos pendentes — mostrado uma vez por sessão, na primeira
+// vez que o utilizador acede ao dashboard. Não abre se não houver pendentes.
+async function maybeShowAcompanhamentosPopup() {
+  if (sessionStorage.getItem('sigms_acomp_popup_shown')) return;
+  let data;
+  try {
+    data = await get('/acompanhamento/pendentes');
+  } catch { return; }
+  sessionStorage.setItem('sigms_acomp_popup_shown', '1');
+  if (!data || !data.total) return;  // sem acompanhamentos agendados → não abre
+
+  const itens = (data.itens || []).slice(0, 6);
+  const linhas = itens.map(i => `
+    <div style="display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid var(--gray-100)">
+      <div style="min-width:0">
+        <div style="font-weight:600;font-size:13px;color:var(--gray-800);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${i.client_nome || 'Cliente'}</div>
+        <div style="font-size:12px;color:var(--gray-500);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${i.assunto || ''}</div>
+      </div>
+      <div style="font-size:12px;font-weight:600;white-space:nowrap;color:${i.vencido ? '#ef4444' : '#f59e0b'}">
+        ${i.vencido ? '⚠ ' : '📅 '}${formatDate(i.proximo_contacto)}
+      </div>
+    </div>`).join('');
+
+  const restantes = data.total - itens.length;
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:9999;background:rgba(0,0,0,0.45)';
+  overlay.innerHTML = `
+    <div class="modal" style="max-width:440px;width:92%;background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 20px 50px rgba(0,0,0,0.25)">
+      <div style="padding:16px 20px;background:linear-gradient(135deg,#fff7ed,#ffedd5);border-bottom:1px solid var(--gray-100)">
+        <div style="font-size:16px;font-weight:700;color:#9a3412">🔔 Acompanhamentos Pendentes</div>
+        <div style="font-size:13px;color:#b45309;margin-top:2px">Tem <strong>${data.total}</strong> acompanhamento${data.total > 1 ? 's' : ''} a precisar de atenção.</div>
+      </div>
+      <div style="padding:8px 20px 4px">${linhas}${restantes > 0 ? `<div style="padding:8px 0;font-size:12px;color:var(--gray-500)">+ ${restantes} mais…</div>` : ''}</div>
+      <div style="padding:14px 20px;display:flex;gap:8px;justify-content:flex-end">
+        <button class="btn btn-secondary" id="acomp-popup-close">Fechar</button>
+        <a href="#/acompanhamento" class="btn btn-primary" id="acomp-popup-ver">Ver acompanhamentos</a>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const fechar = () => overlay.remove();
+  overlay.querySelector('#acomp-popup-close').onclick = fechar;
+  overlay.querySelector('#acomp-popup-ver').onclick = fechar;
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) fechar(); });
 }
 
 async function loadKPIs() {

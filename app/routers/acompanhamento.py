@@ -119,6 +119,37 @@ async def get_lembretes(
     return [_interacao_dict(i, client_map) for i in items]
 
 
+@router.get("/pendentes")
+async def get_pendentes(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Acompanhamentos pendentes para o alerta do dashboard: todos os lembretes
+    activos com data de próximo contacto agendada (vencidos aparecem primeiro)."""
+    result = await db.execute(
+        select(Interacao).where(
+            Interacao.lembrete_ativo == True,
+            Interacao.proximo_contacto.isnot(None),
+            Interacao.proximo_contacto != "",
+        ).order_by(Interacao.proximo_contacto)
+    )
+    items = result.scalars().all()
+    client_ids = list({i.client_id for i in items})
+    client_map = {}
+    if client_ids:
+        from app.models.client import Client
+        cr = await db.execute(select(Client).where(Client.id.in_(client_ids)))
+        for c in cr.scalars().all():
+            client_map[c.id] = c.nome
+    hoje = date.today().isoformat()
+    itens = []
+    for i in items:
+        d = _interacao_dict(i, client_map)
+        d["vencido"] = i.proximo_contacto < hoje
+        itens.append(d)
+    return {"total": len(itens), "itens": itens}
+
+
 @router.get("/interacoes")
 async def list_interacoes(
     client_id: Optional[int] = Query(None),
