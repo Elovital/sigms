@@ -8,10 +8,12 @@ from app.models.audit import AuditLog
 from app.models.acompanhamento import Interacao
 from app.models.prospeccao import Prospeccao
 from app.models.cotacao import CotacaoEnviada
+from app.models.pagamento_parceiro import PagamentoParceiro
 
 __all_models__ = [
     User, RefreshToken, Client, Contact, RgpdConsentLog,
     Apolice, Seguradora, Ramo, Premio, Pagamento, Comissao,
     RiscoAuto, RiscoSaudeVida, Beneficiario, RiscoEmpresa,
     Sinistro, SinistroDoc, AuditLog, Interacao, Prospeccao, CotacaoEnviada,
+    PagamentoParceiro,
 ]

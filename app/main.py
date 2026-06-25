@@ -170,6 +170,7 @@ from app.routers import acompanhamento
 from app.routers import prospeccao
 from app.routers import ia
 from app.routers import cotacoes
+from app.routers import pagamentos_parceiros
 
 app.include_router(auth.router)
 app.include_router(clients.router)
@@ -183,6 +184,7 @@ app.include_router(acompanhamento.router)
 app.include_router(prospeccao.router)
 app.include_router(ia.router)
 app.include_router(cotacoes.router)
+app.include_router(pagamentos_parceiros.router)
 
 static_dir = Path("static")
 if static_dir.exists():
