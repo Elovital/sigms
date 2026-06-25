@@ -1,6 +1,7 @@
 /* SIGMS Financeiro Module */
 import { get, post, put } from './api.js';
 import { toast, formatDate, formatAKZ, estadoBadge } from './utils.js';
+import { renderPagamentosParceiros } from './pagamentos_parceiros.js';
 
 export async function renderFinanceiro(container, currentUser = null) {
   container.innerHTML = `
@@ -14,7 +15,10 @@ export async function renderFinanceiro(container, currentUser = null) {
     <div class="tab" data-tab="comissoes">Comissões</div>
     <div class="tab" data-tab="compliance">⚖️ Compliance</div>
     <div class="tab" data-tab="novo-premio">Registar Prémio</div>
+    <div class="tab" data-tab="parceiros">💳 Pagamentos a Parceiros</div>
   </div>
+
+  <div id="tab-parceiros" class="hidden"></div>
 
   <div id="tab-pagamentos">
     <div class="card">
@@ -155,10 +159,11 @@ export async function renderFinanceiro(container, currentUser = null) {
     tab.addEventListener('click', () => {
       document.querySelectorAll('#fin-tabs .tab').forEach(t => t.classList.remove('active'));
       tab.classList.add('active');
-      const tabs = ['pagamentos', 'comissoes', 'compliance', 'novo-premio'];
+      const tabs = ['pagamentos', 'comissoes', 'compliance', 'novo-premio', 'parceiros'];
       tabs.forEach(t =>
         document.getElementById(`tab-${t}`)?.classList.toggle('hidden', t !== tab.dataset.tab));
       if (tab.dataset.tab === 'compliance') loadCompliance();
+      if (tab.dataset.tab === 'parceiros') renderPagamentosParceiros(document.getElementById('tab-parceiros'));
     });
   });
 
